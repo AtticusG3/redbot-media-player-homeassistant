@@ -1,0 +1,122 @@
+# Service schemas for UI / automation editor (must be valid YAML).
+# Field names must match ATTR_* in const.py and service handlers in __init__.py
+
+play:
+  name: Play
+  description: Queue or play a track (Red Audio [p]play).
+  fields:
+    query:
+      required: true
+      selector:
+        text: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+bumpplay:
+  name: Bumpplay
+  description: Start a track immediately (Red Audio [p]bumpplay).
+  fields:
+    query:
+      required: true
+      selector:
+        text: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+enqueue:
+  name: Enqueue
+  description: Add to queue (same as play for Red Audio).
+  fields:
+    query:
+      required: true
+      selector:
+        text: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+pause:
+  name: Pause
+  description: Pause or resume playback (Red Audio [p]pause).
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+queue:
+  name: Queue
+  description: Read now playing and queue (HAREDRPC__QUEUE).
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+playlist_start:
+  name: Playlist start
+  description: Load a saved Red Audio playlist by name.
+  fields:
+    playlist_name:
+      required: true
+      selector:
+        text: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+playlist_save_start:
+  name: Playlist save and start
+  description: Save a YouTube or Spotify playlist URL to guild playlists and start it.
+  fields:
+    playlist_url:
+      required: true
+      selector:
+        text: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+summon:
+  name: Summon
+  description: Join the actor's voice channel (Red Audio [p]summon).
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+disconnect:
+  name: Disconnect
+  description: Leave voice (Red Audio [p]disconnect).
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        text: {}
+
+voice_state:
+  name: Voice state
+  description: Set the bot's Discord self-mute and self-deafen while in voice.
+  fields:
+    self_mute:
+      required: false
+      default: false
+      selector:
+        boolean: {}
+    self_deaf:
+      required: false
+      default: false
+      selector:
+        boolean: {}
+    config_entry_id:
+      required: false
+      selector:
+        text: {}

@@ -1,0 +1,78 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RedBot Media Player",
+        "description": "Connect to Red-DiscordBot JSON-RPC over WebSocket. Red must run with --rpc (default port 6133). Load the ha_red_rpc cog and Audio.",
+        "data": {
+          "host": "Host",
+          "port": "RPC port",
+          "guild_id": "Guild (server) ID",
+          "channel_id": "Text channel ID",
+          "actor_user_id": "Actor user ID (for permissions)"
+        },
+        "data_description": {
+          "host": "Use 127.0.0.1 when Home Assistant and Red run on the same machine. Red's RPC binds to localhost only, not your LAN IP (192.168.x.x). In Docker without host network, try host.docker.internal or the host gateway.",
+          "port": "Default 6133. Red must be started with --rpc.",
+          "guild_id": "Discord server (guild) snowflake ID.",
+          "channel_id": "Text channel snowflake ID (not voice).",
+          "actor_user_id": "User ID for Audio permission checks (often you or the server owner)."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to Red RPC. Use host 127.0.0.1 if HA is on the same host as Red; ensure Red runs with --rpc and port 6133. LAN IP will not work unless you proxy.",
+      "unknown": "Unexpected error"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TheAudioDB artwork",
+        "description": "Optional album and track art from TheAudioDB (theaudiodb.com). Uses artist and title from Red's now playing. Disable if you do not want outbound HTTPS to TheAudioDB.",
+        "data": {
+          "audiodb_enable": "Look up artwork",
+          "audiodb_api_key": "API key (v1 JSON path; default is the public test key)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "rpc_poll_ok": {
+        "name": "RPC reachable"
+      },
+      "audio_queue_ok": {
+        "name": "Audio queue ready"
+      },
+      "in_voice": {
+        "name": "In voice channel"
+      }
+    },
+    "media_player": {
+      "red_discord_audio": {
+        "name": "Audio"
+      }
+    },
+    "sensor": {
+      "playlists_count": {
+        "name": "Playlists count"
+      },
+      "queue_length": {
+        "name": "Queue length"
+      },
+      "queue_items": {
+        "name": "Up next"
+      },
+      "queue_status": {
+        "name": "Queue status"
+      },
+      "guild_id": {
+        "name": "Guild ID"
+      },
+      "voice_channel_id": {
+        "name": "Voice channel ID"
+      }
+    }
+  }
+}
