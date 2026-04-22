@@ -1,0 +1,74 @@
+type: grid
+cards:
+  - type: media-control
+    entity: media_player.coonowrin_audio
+    grid_options:
+      rows: auto
+      columns: full
+  - type: entity
+    entity: sensor.coonowrin_up_next
+    grid_options:
+      rows: auto
+      columns: full
+  - type: entity
+    entity: input_text.red_song_query
+    state_color: false
+    grid_options:
+      rows: auto
+  - type: entity
+    entity: input_text.red_playlist_url
+    grid_options:
+      rows: auto
+      columns: 12
+  - show_name: true
+    show_icon: true
+    type: button
+    entity: conversation.home_assistant
+    show_state: false
+    tap_action:
+      action: assist
+      pipeline_id: 01j1f53fvzfcszw6gpkd4wxc54
+      start_listening: true
+    name: Hey Jarvis
+    grid_options:
+      rows: auto
+  - type: custom:auto-entities
+    card:
+      type: grid
+      columns: 2
+      square: false
+    card_param: cards
+    filter:
+      include:
+        - options:
+            type: button
+            show_state: false
+            icon: mdi:playlist-music
+            name:
+              type: entity
+            tap_action:
+              action: call-service
+              service: button.press
+              service_data:
+                entity_id: this.entity_id
+          entity_id: button.coonowrin_start_*
+        - options:
+            type: button
+            show_state: false
+            name:
+              type: entity
+            tap_action:
+              action: perform-action
+              perform_action: media_player.media_play_pause
+              target:
+                entity_id: media_player.riding_tunes_audio
+          entity_id: input_button.riding_tunes_toggle
+    sort:
+      method: friendly_name
+    grid_options:
+      columns: full
+      rows: auto
+column_span: 4
+background:
+  color: primary
+  opacity: 75

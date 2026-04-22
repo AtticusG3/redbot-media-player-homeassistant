@@ -2,7 +2,7 @@
 
 Connects Home Assistant to [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot) using JSON-RPC over WebSocket, paired with the `ha_red_rpc` cog from [redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog).
 
-Release docs in this repository are aligned at `1.0.0` for `redbot_media_player`.
+Release docs in this repository are aligned at `1.0.1` for `redbot_media_player`.
 
 ## Requirements
 
@@ -136,6 +136,23 @@ If you prefer YAML over the UI, use the script/helper examples in this README as
 - `input_text` helpers (`red_song_query`, `red_playlist_url`)
 - scripts for play-by-name and playlist save/start
 - optional voice-target script input field
+
+### E) Dashboard examples and screenshots
+
+The `docs/` folder includes practical Lovelace examples and screenshots:
+
+- Dashboard card YAML example: `docs/lovelace-ui-cards.yaml`
+- Config flow screenshot: `docs/config-flow.png`
+- Combined Lovelace cards screenshot: `docs/lovelace-ui-cards.png`
+- Media player entity screenshot: `docs/media-player-entity.png`
+- Up next queue screenshot: `docs/up-next-queue.png`
+
+Example screenshots:
+
+![Config flow](docs/config-flow.png)
+![Lovelace cards](docs/lovelace-ui-cards.png)
+![Media player entity](docs/media-player-entity.png)
+![Up next queue](docs/up-next-queue.png)
 
 ## Media player entity
 
