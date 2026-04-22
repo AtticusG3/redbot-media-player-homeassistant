@@ -1,19 +1,40 @@
 # RedBot Media Player (Home Assistant custom integration)
 
-Connects Home Assistant to [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot) using JSON-RPC over WebSocket, matching the `ha_red_rpc` cog in this repo.
+Connects Home Assistant to [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot) using JSON-RPC over WebSocket, paired with the `ha_red_rpc` cog from [redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog).
+
+Release docs in this repository are aligned at `1.0.0` for `redbot_media_player`.
 
 ## Requirements
 
 - Red running with `--rpc` (and optional `--rpc-port`, default 6133).
-- Cog `ha_red_rpc` loaded, Audio loaded.
+- Cog `ha_red_rpc` loaded from [redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog), Audio loaded.
 - HA and Red on the same host (RPC listens on `127.0.0.1`) or use a tunnel to forward loopback.
 
-## Install
+Related host setup for Home Assistant add-on users: [redBot-hass](https://github.com/AtticusG3/redBot-hass).
+
+## Install (HACS-first)
+
+### Option 1: HACS (recommended first)
+
+1. HACS -> Integrations -> three-dot menu -> Custom repositories.
+2. Add repository URL: `https://github.com/AtticusG3/redbot-media-player-homeassistant`
+3. Category: Integration
+4. Install **RedBot Media Player**
+5. Restart Home Assistant.
+
+### Option 2: Manual install
 
 1. Copy the `redbot_media_player` folder into your Home Assistant `config/custom_components/` directory (include `services.yaml`; do not leave a zero-byte `services.yaml` or Home Assistant may log a load error).
 2. Restart Home Assistant.
 3. **Settings** → **Devices & services** → **Add integration** → **RedBot Media Player** (or add via UI search).
-4. Enter host (usually `127.0.0.1`), port, guild ID, text channel ID, and actor user ID (same semantics as `scripts/ha_red_rpc_test.py`).
+4. Enter host (usually `127.0.0.1`), port, guild ID, text channel ID, and actor user ID (the same values used by the `ha_red_rpc` RPC methods).
+
+## Related repositories and docs
+
+- Red cog (`ha_red_rpc`): [AtticusG3/redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog)
+- Home Assistant add-on host setup: [AtticusG3/redBot-hass](https://github.com/AtticusG3/redBot-hass)
+- Repository-level README: `README.md`
+- Repository-level changelog: `CHANGELOG.md`
 
 ## Services
 
@@ -112,13 +133,9 @@ mode: single
 
 ### D) YAML package option (single copy/paste)
 
-If you prefer YAML over the UI, use:
+If you prefer YAML over the UI, use the script/helper examples in this README as your package baseline:
 
-- `docs/home-assistant-quick-actions.yaml`
-
-It includes:
-
-- `input_text` helpers
+- `input_text` helpers (`red_song_query`, `red_playlist_url`)
 - scripts for play-by-name and playlist save/start
 - optional voice-target script input field
 
