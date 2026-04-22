@@ -44,6 +44,16 @@ def _entry_data() -> dict[str, object]:
     }
 
 
+@pytest.fixture(autouse=True)
+def mock_playlist_name_resolver() -> None:
+    """Keep tests offline by default; explicit tests can override this patch."""
+    with patch(
+        "custom_components.redbot_media_player._async_resolve_playlist_name",
+        AsyncMock(return_value=None),
+    ):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_async_setup_returns_true(hass: HomeAssistant) -> None:
     assert await async_setup(hass, {}) is True
@@ -610,3 +620,83 @@ async def test_service_playlist_save_start_refreshes_playlist_coordinator(
     )
     assert res["ok"] is True
     assert playlist_coord.async_request_refresh.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_service_playlist_save_start_uses_named_rpc_when_supported(
+    hass: HomeAssistant, mock_rpc_call: AsyncMock
+) -> None:
+    async def route(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict | list[str]:
+        if method == "GET_METHODS":
+            return [*FULL_HA_RED_RPC_METHODS, "HAREDRPC__PLAYLIST_SAVE_START_NAMED"]
+        if method == "HAREDRPC__QUEUE":
+            return {"ok": True, "paused": False, "now_playing": None, "queue": []}
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        if method == "HAREDRPC__PLAYLIST_SAVE_START_NAMED":
+            assert params == [1, 2, "AussieBBQ", "https://open.spotify.com/playlist/abc", 3]
+            return {"ok": True, "saved_name": "AussieBBQ", "started": True}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = route
+    entry = MockConfigEntry(domain=DOMAIN, title="T", data=_entry_data())
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    with patch(
+        "custom_components.redbot_media_player._async_resolve_playlist_name",
+        AsyncMock(return_value="AussieBBQ"),
+    ):
+        res = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_PLAYLIST_SAVE_START,
+            {ATTR_PLAYLIST_URL: "https://open.spotify.com/playlist/abc"},
+            blocking=True,
+            return_response=True,
+        )
+    assert res["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_service_playlist_save_start_falls_back_when_name_unresolved(
+    hass: HomeAssistant, mock_rpc_call: AsyncMock
+) -> None:
+    async def route(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict | list[str]:
+        if method == "GET_METHODS":
+            return [*FULL_HA_RED_RPC_METHODS, "HAREDRPC__PLAYLIST_SAVE_START_NAMED"]
+        if method == "HAREDRPC__QUEUE":
+            return {"ok": True, "paused": False, "now_playing": None, "queue": []}
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        if method == "HAREDRPC__PLAYLIST_SAVE_START":
+            assert params == [1, 2, "https://open.spotify.com/playlist/abc", 3]
+            return {"ok": True, "saved_name": "Fallback", "started": True}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = route
+    entry = MockConfigEntry(domain=DOMAIN, title="T", data=_entry_data())
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    res = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_PLAYLIST_SAVE_START,
+        {ATTR_PLAYLIST_URL: "https://open.spotify.com/playlist/abc"},
+        blocking=True,
+        return_response=True,
+    )
+    assert res["ok"] is True

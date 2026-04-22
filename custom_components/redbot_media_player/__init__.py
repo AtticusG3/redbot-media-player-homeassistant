@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from typing import Any
+from urllib.parse import quote_plus, unquote, urlparse
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -41,6 +45,11 @@ _LOGGER = logging.getLogger(__name__)
 
 _SERVICES_FLAG = f"{DOMAIN}_services_registered"
 _PLAYLIST_COORDINATORS = f"{DOMAIN}_playlist_coordinators"
+_RPC_PLAYLIST_SAVE_START = "HAREDRPC__PLAYLIST_SAVE_START"
+_RPC_PLAYLIST_SAVE_START_NAMED = "HAREDRPC__PLAYLIST_SAVE_START_NAMED"
+_SPOTIFY_OEMBED_URL = "https://open.spotify.com/oembed?url={url}"
+_YOUTUBE_OEMBED_URL = "https://www.youtube.com/oembed?format=json&url={url}"
+_PLAYLIST_NAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9]+")
 
 SERVICE_BASE_SCHEMA = vol.Schema(
     {
@@ -66,6 +75,72 @@ SERVICE_VOICE_STATE_SCHEMA = SERVICE_BASE_SCHEMA.extend(
         vol.Optional(ATTR_SELF_DEAF, default=False): cv.boolean,
     }
 )
+
+
+def _sanitize_playlist_name(value: str) -> str:
+    """Normalize fetched playlist titles before sending to RPC."""
+    return _PLAYLIST_NAME_SANITIZE_RE.sub("", value).strip()
+
+
+def _guess_name_from_url(playlist_url: str) -> str | None:
+    """Best-effort fallback when source metadata endpoint is unavailable."""
+    parsed = urlparse(playlist_url)
+    host = parsed.netloc.lower()
+    if "spotify.com" in host:
+        parts = [p for p in parsed.path.split("/") if p]
+        if len(parts) >= 2 and parts[0].lower() == "playlist" and parts[1]:
+            return f"Spotify Playlist {parts[1]}"
+    if "youtube.com" in host or "youtu.be" in host:
+        list_id = None
+        for pair in parsed.query.split("&"):
+            key, _, value = pair.partition("=")
+            if key == "list" and value:
+                list_id = unquote(value)
+                break
+        if list_id:
+            return f"YouTube Playlist {list_id}"
+    return None
+
+
+async def _async_fetch_playlist_title_from_oembed(playlist_url: str) -> str | None:
+    """Fetch playlist title directly from Spotify/YouTube oEmbed endpoints."""
+    parsed = urlparse(playlist_url)
+    host = parsed.netloc.lower()
+    encoded = quote_plus(playlist_url)
+    oembed_url: str | None = None
+    if "spotify.com" in host:
+        oembed_url = _SPOTIFY_OEMBED_URL.format(url=encoded)
+    elif "youtube.com" in host or "youtu.be" in host:
+        oembed_url = _YOUTUBE_OEMBED_URL.format(url=encoded)
+    if oembed_url is None:
+        return None
+
+    timeout = aiohttp.ClientTimeout(total=8.0)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        try:
+            async with session.get(oembed_url, allow_redirects=True) as response:
+                if response.status != 200:
+                    return None
+                payload = json.loads(await response.text())
+        except (aiohttp.ClientError, TimeoutError, ValueError):
+            return None
+
+    title = payload.get("title")
+    if not isinstance(title, str):
+        return None
+    cleaned = _sanitize_playlist_name(title)
+    return cleaned or None
+
+
+async def _async_resolve_playlist_name(playlist_url: str) -> str | None:
+    """Resolve playlist name from provider metadata with URL fallback."""
+    resolved = await _async_fetch_playlist_title_from_oembed(playlist_url)
+    if resolved:
+        return resolved
+    guessed = _guess_name_from_url(playlist_url)
+    if guessed is None:
+        return None
+    return _sanitize_playlist_name(guessed)
 
 
 async def _async_get_entry(hass: HomeAssistant, call: ServiceCall) -> ConfigEntry:
@@ -227,21 +302,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_playlist_save_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        playlist_url = call.data[ATTR_PLAYLIST_URL]
+        playlist_name = await _async_resolve_playlist_name(playlist_url)
+        coordinator: RedRpcQueueCoordinator | None = ent.runtime_data
+        supports_named_rpc = bool(
+            coordinator
+            and coordinator.rpc_method_names
+            and _RPC_PLAYLIST_SAVE_START_NAMED in coordinator.rpc_method_names
+            and playlist_name
+        )
+        rpc_method = (
+            _RPC_PLAYLIST_SAVE_START_NAMED if supports_named_rpc else _RPC_PLAYLIST_SAVE_START
+        )
         try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__PLAYLIST_SAVE_START",
-                [
-                    p["guild_id"],
-                    p["channel_id"],
-                    call.data[ATTR_PLAYLIST_URL],
-                    p["actor_id"],
-                ],
-                timeout=300.0,
-            )
+            if supports_named_rpc and playlist_name:
+                result = await rpc_call(
+                    p["host"],
+                    p["port"],
+                    _RPC_PLAYLIST_SAVE_START_NAMED,
+                    [
+                        p["guild_id"],
+                        p["channel_id"],
+                        playlist_name,
+                        playlist_url,
+                        p["actor_id"],
+                    ],
+                    timeout=300.0,
+                )
+            else:
+                result = await rpc_call(
+                    p["host"],
+                    p["port"],
+                    _RPC_PLAYLIST_SAVE_START,
+                    [
+                        p["guild_id"],
+                        p["channel_id"],
+                        playlist_url,
+                        p["actor_id"],
+                    ],
+                    timeout=300.0,
+                )
         except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__PLAYLIST_SAVE_START failed: %s", err)
+            _LOGGER.error("%s failed: %s", rpc_method, err)
             return {"ok": False, "error": str(err)}
         if isinstance(result, dict) and result.get("ok", True):
             playlist_coord = hass.data.get(_PLAYLIST_COORDINATORS, {}).get(ent.entry_id)
