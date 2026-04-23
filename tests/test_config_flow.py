@@ -37,7 +37,9 @@ async def test_config_flow_user_shows_form(hass: object) -> None:
 
 
 @pytest.mark.asyncio
-async def test_config_flow_create_entry(hass: object) -> None:
+async def test_config_flow_create_entry(
+    hass: object, mock_rpc_call: object
+) -> None:
     """Successful validation creates an entry."""
     with patch(
         "custom_components.redbot_media_player.config_flow.verify_red_rpc",
@@ -56,7 +58,9 @@ async def test_config_flow_create_entry(hass: object) -> None:
 
 
 @pytest.mark.asyncio
-async def test_config_flow_create_entry_without_actor(hass: object) -> None:
+async def test_config_flow_create_entry_without_actor(
+    hass: object, mock_rpc_call: object
+) -> None:
     """Actor ID is optional and may be blank."""
     with patch(
         "custom_components.redbot_media_player.config_flow.verify_red_rpc",
