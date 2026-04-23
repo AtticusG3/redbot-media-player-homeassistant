@@ -1,6 +1,28 @@
 {
   "config": {
     "step": {
+      "reauth_confirm": {
+        "title": "Reconnect RedBot Media Player",
+        "description": "Update and verify Red RPC connection settings.",
+        "data": {
+          "host": "Host",
+          "port": "RPC port",
+          "guild_id": "Guild (server) ID",
+          "channel_id": "Text channel ID",
+          "actor_user_id": "Actor user ID (for permissions)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure RedBot Media Player",
+        "description": "Update and verify integration connection settings.",
+        "data": {
+          "host": "Host",
+          "port": "RPC port",
+          "guild_id": "Guild (server) ID",
+          "channel_id": "Text channel ID",
+          "actor_user_id": "Actor user ID (for permissions)"
+        }
+      },
       "user": {
         "title": "RedBot Media Player",
         "description": "Connect to Red-DiscordBot JSON-RPC over WebSocket. Red must run with --rpc (default port 6133). Load the ha_red_rpc cog and Audio.",

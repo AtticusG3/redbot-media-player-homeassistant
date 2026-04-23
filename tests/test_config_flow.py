@@ -151,3 +151,71 @@ async def test_options_flow_create_entry(
     updated = hass.config_entries.async_get_entry(entry.entry_id)
     assert updated is not None
     assert updated.options[CONF_AUDIODB_ENABLE] is False
+
+
+@pytest.mark.asyncio
+async def test_reauth_confirm_updates_entry(hass: object) -> None:
+    """Reauth validates input and updates entry data."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Red RPC",
+        data=dict(_valid_user_input()),
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.redbot_media_player.config_flow.verify_red_rpc",
+        new_callable=AsyncMock,
+    ):
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        result = await hass.config_entries.flow.async_configure(
+            init["flow_id"],
+            user_input={
+                **_valid_user_input(),
+                "host": "localhost",
+            },
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    updated = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated is not None
+    assert updated.data["host"] == "localhost"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_updates_entry(hass: object, mock_rpc_call: object) -> None:
+    """Reconfigure validates input and updates config entry data."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Red RPC",
+        unique_id="127.0.0.1_1",
+        data=dict(_valid_user_input()),
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.redbot_media_player.config_flow.verify_red_rpc",
+        new_callable=AsyncMock,
+    ):
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
+        )
+        result = await hass.config_entries.flow.async_configure(
+            init["flow_id"],
+            user_input={
+                **_valid_user_input(),
+                "host": "localhost",
+            },
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    updated = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated is not None
+    assert updated.data["host"] == "localhost"

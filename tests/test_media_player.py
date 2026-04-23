@@ -17,6 +17,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.redbot_media_player.const import DOMAIN, LEGACY_HA_RED_RPC_METHODS
 from custom_components.redbot_media_player.coordinator import RedRpcQueueCoordinator
 from custom_components.redbot_media_player.media_player import (
+    PARALLEL_UPDATES,
     RedDiscordMediaPlayer,
     _now_playing,
 )
@@ -37,6 +38,11 @@ def _entry(hass: HomeAssistant) -> MockConfigEntry:
     )
     e.add_to_hass(hass)
     return e
+
+
+def test_parallel_updates_declared() -> None:
+    """Media player platform uses explicit update parallelism."""
+    assert PARALLEL_UPDATES == 1
 
 
 @pytest.mark.asyncio

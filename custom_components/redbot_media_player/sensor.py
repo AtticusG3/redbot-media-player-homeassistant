@@ -24,6 +24,8 @@ from .coordinator import RedRpcQueueCoordinator
 from .helpers import device_info_for_red_entry, get_rpc_params
 from .playlist_coordinator import RedRpcPlaylistCoordinator
 
+PARALLEL_UPDATES = 1
+
 
 def _queue_length(coordinator: RedRpcQueueCoordinator) -> int | None:
     """Number of tracks queued after the current item."""
