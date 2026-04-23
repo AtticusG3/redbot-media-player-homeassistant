@@ -50,6 +50,7 @@ async def test_config_flow_create_entry(hass: object) -> None:
             init["flow_id"],
             user_input=_valid_user_input(),
         )
+    await hass.async_block_till_done()
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert "Red RPC" in result["title"]
 
@@ -70,6 +71,7 @@ async def test_config_flow_create_entry_without_actor(hass: object) -> None:
             init["flow_id"],
             user_input=payload,
         )
+    await hass.async_block_till_done()
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
