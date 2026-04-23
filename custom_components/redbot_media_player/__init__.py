@@ -39,7 +39,7 @@ from .const import (
 from .coordinator import RedRpcQueueCoordinator
 from .helpers import get_rpc_params
 from .playlist_coordinator import RedRpcPlaylistCoordinator
-from .rpc import RedRpcError, async_fetch_red_rpc_methods, rpc_call
+from .rpc import RedRpcError, async_fetch_red_rpc_methods, rpc_call, set_rpc_hass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -167,6 +167,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up RedBot Media Player from a config entry."""
+    set_rpc_hass(hass)
     coordinator = RedRpcQueueCoordinator(hass, entry)
     playlist_coordinator = RedRpcPlaylistCoordinator(hass, entry)
     p = get_rpc_params(entry)
@@ -517,4 +518,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ):
             hass.services.async_remove(DOMAIN, svc)
         hass.data.pop(_SERVICES_FLAG, None)
+        set_rpc_hass(None)
     return True
