@@ -37,12 +37,18 @@ def get_audiodb_config(entry: ConfigEntry) -> tuple[bool, str]:
 def get_rpc_params(entry: ConfigEntry) -> dict[str, Any]:
     """Host, port, and Discord IDs from a config entry."""
     d = entry.data
+    actor_raw = d.get(CONF_ACTOR_USER_ID)
+    actor_id: int | None = None
+    if actor_raw is not None:
+        actor_text = str(actor_raw).strip()
+        if actor_text:
+            actor_id = int(actor_text)
     return {
         "host": d[CONF_HOST],
         "port": int(d[CONF_PORT]),
         "guild_id": int(d[CONF_GUILD_ID]),
         "channel_id": int(d[CONF_CHANNEL_ID]),
-        "actor_id": int(d[CONF_ACTOR_USER_ID]),
+        "actor_id": actor_id,
     }
 
 

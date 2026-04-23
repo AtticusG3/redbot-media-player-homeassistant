@@ -55,6 +55,25 @@ async def test_config_flow_create_entry(hass: object) -> None:
 
 
 @pytest.mark.asyncio
+async def test_config_flow_create_entry_without_actor(hass: object) -> None:
+    """Actor ID is optional and may be blank."""
+    with patch(
+        "custom_components.redbot_media_player.config_flow.verify_red_rpc",
+        new_callable=AsyncMock,
+    ):
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        payload = _valid_user_input()
+        payload["actor_user_id"] = ""
+        result = await hass.config_entries.flow.async_configure(
+            init["flow_id"],
+            user_input=payload,
+        )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
 async def test_config_flow_cannot_connect(hass: object) -> None:
     """RedRpcError surfaces as cannot_connect."""
     from custom_components.redbot_media_player.rpc import RedRpcError

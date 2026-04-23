@@ -35,7 +35,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_PORT, default=DEFAULT_PORT): cv.port,
         vol.Required(CONF_GUILD_ID): cv.string,
         vol.Required(CONF_CHANNEL_ID): cv.string,
-        vol.Required(CONF_ACTOR_USER_ID): cv.string,
+        vol.Optional(CONF_ACTOR_USER_ID, default=""): cv.string,
     }
 )
 

@@ -18,6 +18,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    ATTR_ACTOR_USER_ID,
     SERVICE_BUMPPLAY,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_PLAYLIST_NAME,
@@ -54,6 +55,7 @@ _PLAYLIST_NAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9]+")
 SERVICE_BASE_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Optional(ATTR_ACTOR_USER_ID): cv.string,
     }
 )
 
@@ -188,6 +190,80 @@ async def _async_call_service_rpc(
     return _normalize_service_result(result)
 
 
+def _extract_actor_id_from_queue(queue_payload: Any) -> int | None:
+    """Select a user ID from queue payload member fields."""
+    if not isinstance(queue_payload, dict):
+        return None
+    bot_id_raw = queue_payload.get("bot_user_id")
+    bot_user_id = (
+        int(bot_id_raw)
+        if isinstance(bot_id_raw, (int, str)) and str(bot_id_raw).isdigit()
+        else None
+    )
+    candidate_fields = (
+        "voice_member_ids",
+        "voice_channel_member_ids",
+        "channel_member_ids",
+        "member_ids",
+    )
+    for field_name in candidate_fields:
+        raw = queue_payload.get(field_name)
+        if not isinstance(raw, list):
+            continue
+        for member in raw:
+            member_id: int | None = None
+            if isinstance(member, int):
+                member_id = member
+            elif isinstance(member, str) and member.isdigit():
+                member_id = int(member)
+            elif isinstance(member, dict):
+                for key in ("user_id", "member_id", "id"):
+                    value = member.get(key)
+                    if isinstance(value, int):
+                        member_id = value
+                        break
+                    if isinstance(value, str) and value.isdigit():
+                        member_id = int(value)
+                        break
+            if member_id is None:
+                continue
+            if bot_user_id is not None and member_id == bot_user_id:
+                continue
+            return member_id
+    return None
+
+
+async def _async_resolve_actor_id(entry: ConfigEntry, call: ServiceCall) -> int:
+    """Resolve actor from service override, config, or live channel member list."""
+    actor_override = call.data.get(ATTR_ACTOR_USER_ID)
+    if actor_override is not None:
+        actor_text = str(actor_override).strip()
+        if actor_text:
+            return int(actor_text)
+    p = get_rpc_params(entry)
+    actor_id = p["actor_id"]
+    if actor_id is not None:
+        return actor_id
+    queue_result = await _async_call_service_rpc(
+        entry,
+        "HAREDRPC__QUEUE",
+        [p["guild_id"]],
+        timeout=60.0,
+    )
+    if not queue_result.get("ok"):
+        raise HomeAssistantError(
+            "Cannot auto-select actor_user_id; queue lookup failed. "
+            "Set actor_user_id in the integration or service data."
+        )
+    actor_from_queue = _extract_actor_id_from_queue(queue_result)
+    if actor_from_queue is None:
+        raise HomeAssistantError(
+            "Cannot auto-select actor_user_id; no voice member IDs were provided by Red RPC. "
+            "Set actor_user_id in the integration or service data."
+        )
+    return actor_from_queue
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Legacy setup."""
     return True
@@ -226,40 +302,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_play(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__PLAY",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
             timeout=180.0,
         )
 
     async def handle_bumpplay(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__BUMPPLAY",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
             timeout=180.0,
         )
 
     async def handle_enqueue(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__ENQUEUE",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
             timeout=180.0,
         )
 
     async def handle_pause(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__PAUSE",
-            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], actor_id],
             timeout=90.0,
         )
 
@@ -276,6 +356,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_playlist_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         result = await _async_call_service_rpc(
             ent,
             "HAREDRPC__PLAYLIST_START",
@@ -283,7 +364,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 p["guild_id"],
                 p["channel_id"],
                 call.data[ATTR_PLAYLIST_NAME],
-                p["actor_id"],
+                actor_id,
             ],
             timeout=300.0,
         )
@@ -296,6 +377,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_playlist_save_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         playlist_url = call.data[ATTR_PLAYLIST_URL]
         playlist_name = await _async_resolve_playlist_name(playlist_url)
         coordinator: RedRpcQueueCoordinator | None = ent.runtime_data
@@ -314,14 +396,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 p["channel_id"],
                 playlist_name,
                 playlist_url,
-                p["actor_id"],
+                actor_id,
             ]
         else:
             params = [
                 p["guild_id"],
                 p["channel_id"],
                 playlist_url,
-                p["actor_id"],
+                actor_id,
             ]
         result = await _async_call_service_rpc(
             ent,
@@ -338,20 +420,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_summon(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__SUMMON",
-            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], actor_id],
             timeout=120.0,
         )
 
     async def handle_disconnect(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
         return await _async_call_service_rpc(
             ent,
             "HAREDRPC__DISCONNECT",
-            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            [p["guild_id"], p["channel_id"], actor_id],
             timeout=120.0,
         )
 
