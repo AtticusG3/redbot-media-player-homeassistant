@@ -39,7 +39,7 @@ from .const import (
 from .coordinator import RedRpcQueueCoordinator
 from .helpers import get_rpc_params
 from .playlist_coordinator import RedRpcPlaylistCoordinator
-from .rpc import RedRpcError, async_fetch_red_rpc_methods, rpc_call
+from .rpc import RedRpcError, async_fetch_red_rpc_methods, rpc_call, set_rpc_hass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -160,6 +160,34 @@ async def _async_get_entry(hass: HomeAssistant, call: ServiceCall) -> ConfigEntr
     )
 
 
+def _normalize_service_result(result: Any) -> dict[str, Any]:
+    """Normalize RPC results to service response payloads."""
+    return result if isinstance(result, dict) else {"result": result}
+
+
+async def _async_call_service_rpc(
+    entry: ConfigEntry,
+    rpc_method: str,
+    params: list[Any],
+    *,
+    timeout: float,
+) -> dict[str, Any]:
+    """Call one RPC method and map transport errors to service response."""
+    p = get_rpc_params(entry)
+    try:
+        result = await rpc_call(
+            p["host"],
+            p["port"],
+            rpc_method,
+            params,
+            timeout=timeout,
+        )
+    except RedRpcError as err:
+        _LOGGER.error("%s failed: %s", rpc_method, err)
+        return {"ok": False, "error": str(err)}
+    return _normalize_service_result(result)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Legacy setup."""
     return True
@@ -167,6 +195,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up RedBot Media Player from a config entry."""
+    set_rpc_hass(hass)
     coordinator = RedRpcQueueCoordinator(hass, entry)
     playlist_coordinator = RedRpcPlaylistCoordinator(hass, entry)
     p = get_rpc_params(entry)
@@ -197,107 +226,72 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_play(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__PLAY",
-                [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
-                timeout=180.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__PLAY failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__PLAY",
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            timeout=180.0,
+        )
 
     async def handle_bumpplay(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__BUMPPLAY",
-                [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
-                timeout=180.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__BUMPPLAY failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__BUMPPLAY",
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            timeout=180.0,
+        )
 
     async def handle_enqueue(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__ENQUEUE",
-                [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
-                timeout=180.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__ENQUEUE failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__ENQUEUE",
+            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], p["actor_id"]],
+            timeout=180.0,
+        )
 
     async def handle_pause(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__PAUSE",
-                [p["guild_id"], p["channel_id"], p["actor_id"]],
-                timeout=90.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__PAUSE failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__PAUSE",
+            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            timeout=90.0,
+        )
 
     async def handle_queue(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__QUEUE",
-                [p["guild_id"]],
-                timeout=60.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__QUEUE failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__QUEUE",
+            [p["guild_id"]],
+            timeout=60.0,
+        )
 
     async def handle_playlist_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__PLAYLIST_START",
-                [
-                    p["guild_id"],
-                    p["channel_id"],
-                    call.data[ATTR_PLAYLIST_NAME],
-                    p["actor_id"],
-                ],
-                timeout=300.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__PLAYLIST_START failed: %s", err)
-            return {"ok": False, "error": str(err)}
+        result = await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__PLAYLIST_START",
+            [
+                p["guild_id"],
+                p["channel_id"],
+                call.data[ATTR_PLAYLIST_NAME],
+                p["actor_id"],
+            ],
+            timeout=300.0,
+        )
         if isinstance(result, dict) and result.get("ok", True):
             playlist_coord = hass.data.get(_PLAYLIST_COORDINATORS, {}).get(ent.entry_id)
             if playlist_coord is not None:
                 await playlist_coord.async_request_refresh()
-        return result if isinstance(result, dict) else {"result": result}
+        return result
 
     async def handle_playlist_save_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
@@ -314,94 +308,66 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         rpc_method = (
             _RPC_PLAYLIST_SAVE_START_NAMED if supports_named_rpc else _RPC_PLAYLIST_SAVE_START
         )
-        try:
-            if supports_named_rpc and playlist_name:
-                result = await rpc_call(
-                    p["host"],
-                    p["port"],
-                    _RPC_PLAYLIST_SAVE_START_NAMED,
-                    [
-                        p["guild_id"],
-                        p["channel_id"],
-                        playlist_name,
-                        playlist_url,
-                        p["actor_id"],
-                    ],
-                    timeout=300.0,
-                )
-            else:
-                result = await rpc_call(
-                    p["host"],
-                    p["port"],
-                    _RPC_PLAYLIST_SAVE_START,
-                    [
-                        p["guild_id"],
-                        p["channel_id"],
-                        playlist_url,
-                        p["actor_id"],
-                    ],
-                    timeout=300.0,
-                )
-        except RedRpcError as err:
-            _LOGGER.error("%s failed: %s", rpc_method, err)
-            return {"ok": False, "error": str(err)}
+        if supports_named_rpc and playlist_name:
+            params = [
+                p["guild_id"],
+                p["channel_id"],
+                playlist_name,
+                playlist_url,
+                p["actor_id"],
+            ]
+        else:
+            params = [
+                p["guild_id"],
+                p["channel_id"],
+                playlist_url,
+                p["actor_id"],
+            ]
+        result = await _async_call_service_rpc(
+            ent,
+            rpc_method,
+            params,
+            timeout=300.0,
+        )
         if isinstance(result, dict) and result.get("ok", True):
             playlist_coord = hass.data.get(_PLAYLIST_COORDINATORS, {}).get(ent.entry_id)
             if playlist_coord is not None:
                 await playlist_coord.async_request_refresh()
-        return result if isinstance(result, dict) else {"result": result}
+        return result
 
     async def handle_summon(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__SUMMON",
-                [p["guild_id"], p["channel_id"], p["actor_id"]],
-                timeout=120.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__SUMMON failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__SUMMON",
+            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            timeout=120.0,
+        )
 
     async def handle_disconnect(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__DISCONNECT",
-                [p["guild_id"], p["channel_id"], p["actor_id"]],
-                timeout=120.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__DISCONNECT failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__DISCONNECT",
+            [p["guild_id"], p["channel_id"], p["actor_id"]],
+            timeout=120.0,
+        )
 
     async def handle_voice_state(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
-        try:
-            result = await rpc_call(
-                p["host"],
-                p["port"],
-                "HAREDRPC__VOICE_STATE",
-                [
-                    p["guild_id"],
-                    call.data[ATTR_SELF_MUTE],
-                    call.data[ATTR_SELF_DEAF],
-                ],
-                timeout=60.0,
-            )
-        except RedRpcError as err:
-            _LOGGER.error("HAREDRPC__VOICE_STATE failed: %s", err)
-            return {"ok": False, "error": str(err)}
-        return result if isinstance(result, dict) else {"result": result}
+        return await _async_call_service_rpc(
+            ent,
+            "HAREDRPC__VOICE_STATE",
+            [
+                p["guild_id"],
+                call.data[ATTR_SELF_MUTE],
+                call.data[ATTR_SELF_DEAF],
+            ],
+            timeout=60.0,
+        )
 
     if not hass.data.get(_SERVICES_FLAG):
         hass.data[_SERVICES_FLAG] = True
@@ -517,4 +483,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ):
             hass.services.async_remove(DOMAIN, svc)
         hass.data.pop(_SERVICES_FLAG, None)
+        set_rpc_hass(None)
     return True

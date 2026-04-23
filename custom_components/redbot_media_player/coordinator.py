@@ -7,11 +7,12 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .audiodb import async_fetch_album_art_url, normalize_display_metadata
-from .const import DOMAIN, FULL_HA_RED_RPC_METHODS
+from .const import DOMAIN, FULL_HA_RED_RPC_METHODS, REPAIRS_ISSUE_RPC_UNAVAILABLE
 from .helpers import get_audiodb_config, get_rpc_params
 from .rpc import RedRpcError, rpc_call
 
@@ -38,6 +39,7 @@ class RedRpcQueueCoordinator(DataUpdateCoordinator[dict | None]):
         self.media_image_url: str | None = None
         self._track_art_fingerprint: str | None = None
         self.last_queue_poll_utc = None
+        self._repairs_issue_id = f"{REPAIRS_ISSUE_RPC_UNAVAILABLE}_{entry.entry_id}"
 
     @property
     def effective_rpc_methods(self) -> frozenset[str]:
@@ -57,9 +59,28 @@ class RedRpcQueueCoordinator(DataUpdateCoordinator[dict | None]):
                 timeout=45.0,
             )
         except RedRpcError as err:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._repairs_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=REPAIRS_ISSUE_RPC_UNAVAILABLE,
+                translation_placeholders={"host": str(p["host"]), "port": str(p["port"])},
+            )
             raise UpdateFailed(f"Red RPC queue failed: {err}") from err
         if not isinstance(result, dict):
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._repairs_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=REPAIRS_ISSUE_RPC_UNAVAILABLE,
+                translation_placeholders={"host": str(p["host"]), "port": str(p["port"])},
+            )
             raise UpdateFailed("Invalid queue response from Red")
+        ir.async_delete_issue(self.hass, DOMAIN, self._repairs_issue_id)
         self.last_queue_poll_utc = dt_util.utcnow()
         await self._async_sync_audiodb_art(result)
         return result

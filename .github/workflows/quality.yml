@@ -1,0 +1,31 @@
+name: Quality Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests-and-typing:
+    name: Tests and typing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[test]"
+
+      - name: Run tests
+        run: |
+          pytest tests/ --cov=custom_components/redbot_media_player --cov-report=term-missing
+
+      - name: Run strict typing
+        run: |
+          mypy custom_components/redbot_media_player

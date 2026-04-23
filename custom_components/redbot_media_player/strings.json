@@ -1,0 +1,12 @@
+{
+  "issues": {
+    "rpc_unavailable": {
+      "title": "Red RPC queue is unavailable",
+      "description": "Home Assistant cannot read queue data from Red RPC at {host}:{port}. Verify Red is running with --rpc and reachable from Home Assistant."
+    },
+    "playlist_rpc_unavailable": {
+      "title": "Red RPC playlist API is unavailable",
+      "description": "Home Assistant cannot read playlist inventory from Red RPC at {host}:{port}. Verify Red is running with --rpc and the ha_red_rpc cog is loaded."
+    }
+  }
+}

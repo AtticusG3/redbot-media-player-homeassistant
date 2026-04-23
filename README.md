@@ -29,6 +29,12 @@ Related host setup for Home Assistant add-on users: [redBot-hass](https://github
 3. **Settings** -> **Devices & services** -> **Add integration** -> **RedBot Media Player** (or add via UI search).
 4. Enter host (usually `127.0.0.1`), port, guild ID, text channel ID, and actor user ID (the same values used by the `ha_red_rpc` RPC methods).
 
+## Reconfigure and reauthenticate
+
+- To change host, port, guild, channel, or actor values after setup, open the integration card and use **Reconfigure**.
+- If Home Assistant prompts for reauthentication, the integration opens a reauth confirmation form that validates connectivity before saving updates.
+- Both flows run the same RPC validation checks used during first-time setup.
+
 ## Related repositories
 
 - Red cog (`ha_red_rpc`): [AtticusG3/redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog)
@@ -195,6 +201,17 @@ Each entry also registers binary sensors and sensors that reuse the same queue p
 | Voice channel ID | `sensor` | Voice channel id from Red when connected; unavailable when not in voice. |
 
 They share the same **device** as the media player and reuse the coordinator (no extra RPC calls).
+
+## Diagnostics and repairs
+
+- The integration provides a diagnostics endpoint for support bundles with sensitive connection identifiers redacted.
+- Runtime connectivity failures create a Repairs issue in Home Assistant so outages are visible in the UI.
+- Repairs issues clear automatically once queue and playlist RPC polling succeeds again.
+
+## Known limitations
+
+- Red RPC does not currently expose discovery metadata for Home Assistant auto-discovery in this integration.
+- Discovery-related quality-scale checks are treated as not applicable unless Red exposes a stable discovery mechanism for this transport.
 
 ## Multiple servers
 

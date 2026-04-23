@@ -19,6 +19,7 @@ from .playlist_coordinator import RedRpcPlaylistCoordinator
 from .rpc import RedRpcError, rpc_call
 
 _LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(

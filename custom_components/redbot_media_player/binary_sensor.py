@@ -20,6 +20,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import RedRpcQueueCoordinator
 from .helpers import device_info_for_red_entry
 
+PARALLEL_UPDATES = 1
+
 
 def _rpc_poll_ok(coordinator: RedRpcQueueCoordinator) -> bool:
     """Last HAREDRPC__QUEUE poll completed (transport + JSON)."""

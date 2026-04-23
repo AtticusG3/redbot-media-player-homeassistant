@@ -26,6 +26,7 @@ from .rpc import RedRpcError, rpc_call
 
 _LOGGER = logging.getLogger(__name__)
 _MUTED_VOLUME_LEVEL = 0.01
+PARALLEL_UPDATES = 1
 
 
 def _now_playing(data: Any) -> dict[str, Any] | None:

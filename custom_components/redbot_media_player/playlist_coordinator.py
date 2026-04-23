@@ -7,9 +7,11 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import DOMAIN, REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE
 from .helpers import get_rpc_params
 from .rpc import RedRpcError, rpc_call
 
@@ -23,13 +25,28 @@ class RedRpcPlaylistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     config_entry: ConfigEntry
 
-    def __init__(self, hass, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN}_{entry.entry_id}_playlists",
             update_interval=PLAYLIST_SCAN_INTERVAL,
+        )
+        self._repairs_issue_id = (
+            f"{REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE}_{entry.entry_id}"
+        )
+
+    def _raise_repairs_issue(self, host: str, port: int) -> None:
+        """Create or refresh the playlist RPC availability issue."""
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._repairs_issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE,
+            translation_placeholders={"host": host, "port": str(port)},
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -43,15 +60,20 @@ class RedRpcPlaylistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 timeout=90.0,
             )
         except RedRpcError as err:
+            self._raise_repairs_issue(str(p["host"]), p["port"])
             raise UpdateFailed(f"Red RPC playlist list failed: {err}") from err
 
         if not isinstance(result, dict):
+            self._raise_repairs_issue(str(p["host"]), p["port"])
             raise UpdateFailed("Invalid playlist list response from Red")
 
         playlists = result.get("playlists")
         if playlists is None:
             result["playlists"] = []
+            ir.async_delete_issue(self.hass, DOMAIN, self._repairs_issue_id)
             return result
         if not isinstance(playlists, list):
+            self._raise_repairs_issue(str(p["host"]), p["port"])
             raise UpdateFailed("Invalid playlists payload from Red")
+        ir.async_delete_issue(self.hass, DOMAIN, self._repairs_issue_id)
         return result
