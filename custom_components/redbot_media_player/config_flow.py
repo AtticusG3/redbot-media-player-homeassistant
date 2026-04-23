@@ -96,7 +96,7 @@ class RedDiscordRpcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+    async def async_step_reauth(self, _entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Start reauthentication flow for an existing entry."""
         return await self.async_step_reauth_confirm()
 
@@ -117,8 +117,10 @@ class RedDiscordRpcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception during reauth")
                 errors["base"] = "unknown"
             else:
-                self.hass.config_entries.async_update_entry(entry, data=user_input)
-                return self.async_abort(reason="reauth_successful")
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=user_input,
+                )
 
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -152,8 +154,10 @@ class RedDiscordRpcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception during reconfigure")
                 errors["base"] = "unknown"
             else:
-                self.hass.config_entries.async_update_entry(entry, data=user_input)
-                return self.async_abort(reason="reconfigure_successful")
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=user_input,
+                )
 
         return self.async_show_form(
             step_id="reconfigure",

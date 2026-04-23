@@ -11,7 +11,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.redbot_media_player import DOMAIN, async_setup
+from custom_components.redbot_media_player import (
+    DOMAIN,
+    _guess_name_from_url,
+    _normalize_service_result,
+    async_setup,
+)
 from custom_components.redbot_media_player.const import (
     ATTR_CONFIG_ENTRY_ID,
     ATTR_PLAYLIST_NAME,
@@ -57,6 +62,24 @@ def mock_playlist_name_resolver() -> None:
 @pytest.mark.asyncio
 async def test_async_setup_returns_true(hass: HomeAssistant) -> None:
     assert await async_setup(hass, {}) is True
+
+
+def test_normalize_service_result_wraps_scalars() -> None:
+    """Service responses wrap non-dict RPC results consistently."""
+    assert _normalize_service_result({"ok": True}) == {"ok": True}
+    assert _normalize_service_result("plain") == {"result": "plain"}
+
+
+def test_guess_name_from_url_provider_fallbacks() -> None:
+    """Playlist URL fallback naming covers Spotify and YouTube formats."""
+    assert (
+        _guess_name_from_url("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        == "Spotify Playlist 37i9dQZF1DXcBWIGoYBM5M"
+    )
+    assert (
+        _guess_name_from_url("https://www.youtube.com/watch?v=abc123&list=PL1234")
+        == "YouTube Playlist PL1234"
+    )
 
 
 @pytest.mark.asyncio
