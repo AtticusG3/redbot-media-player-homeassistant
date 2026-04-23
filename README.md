@@ -2,7 +2,7 @@
 
 Connects Home Assistant to [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot) using JSON-RPC over WebSocket, paired with the `ha_red_rpc` cog from [redbot-media-player-cog](https://github.com/AtticusG3/redbot-media-player-cog).
 
-Release docs in this repository are aligned at `1.0.1` for `redbot_media_player`.
+Release docs in this repository are aligned at `1.1.0` for `redbot_media_player`.
 
 ## Requirements
 

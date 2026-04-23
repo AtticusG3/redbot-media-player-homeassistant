@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0] - 2026-04-24
+
+### Changed (1.1.0)
+
+- Added comprehensive config flow and reauth hardening, including actor user support and test stability improvements.
+- Implemented quality-scale readiness updates across diagnostics, repairs lifecycle handling, networking constraints, and stricter typing/test coverage.
+- Synced release docs and integration manifest version to `1.1.0`.
+
+### Links (1.1.0)
+
+- Integration changelog: `custom_components/redbot_media_player/CHANGELOG.md`
+- Red cog (`ha_red_rpc`): <https://github.com/AtticusG3/redbot-media-player-cog>
+- Home Assistant add-on repo: <https://github.com/AtticusG3/redBot-hass>
+
 ## [1.0.1] - 2026-04-23
 
 ### Changed (1.0.1)

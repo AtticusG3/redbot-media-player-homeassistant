@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] - 2026-04-24
+
+### Added (1.1.0)
+
+- Actor user selection support during setup and service calls, with automatic actor fallback for voice-member-based commands.
+
+### Changed (1.1.0)
+
+- Config flow and reauthentication handling now enforce stronger validation paths and more reliable test behavior.
+- Diagnostics and repairs lifecycle behavior now better reflect runtime RPC connectivity state and recovery.
+- Quality-scale readiness updates improved networking, typing rigor, and coordinator/service test coverage.
+- Integration version advanced to `1.1.0`.
+
+### Links (1.1.0)
+
+- Repository changelog: `CHANGELOG.md`
+- Red cog (`ha_red_rpc`): <https://github.com/AtticusG3/redbot-media-player-cog>
+- Home Assistant add-on repo: <https://github.com/AtticusG3/redBot-hass>
+
 ## [1.0.1] - 2026-04-23
 
 ### Added (1.0.1)
