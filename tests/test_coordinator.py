@@ -420,3 +420,109 @@ async def test_playlist_coordinator_success_and_invalid_payload(
     mock_rpc_call.side_effect = bad_list
     await coord.async_refresh()
     assert not coord.last_update_success
+
+
+@pytest.mark.asyncio
+async def test_queue_coordinator_creates_and_clears_repairs_issue(
+    hass: object, mock_rpc_call: object, monkeypatch: MonkeyPatch
+) -> None:
+    created: list[tuple[str, str]] = []
+    deleted: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        "custom_components.redbot_media_player.coordinator.ir.async_create_issue",
+        lambda hass_obj, domain, issue_id, **kwargs: created.append((domain, issue_id)),
+    )
+    monkeypatch.setattr(
+        "custom_components.redbot_media_player.coordinator.ir.async_delete_issue",
+        lambda hass_obj, domain, issue_id: deleted.append((domain, issue_id)),
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test",
+        data={
+            "host": "127.0.0.1",
+            "port": 6133,
+            "guild_id": "1",
+            "channel_id": "2",
+            "actor_user_id": "3",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = RedRpcQueueCoordinator(hass, entry)
+
+    mock_rpc_call.side_effect = RedRpcError("down")
+    await coord.async_refresh()
+    assert created
+    assert created[-1][0] == DOMAIN
+
+    async def ok(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict[str, object]:
+        if method == "HAREDRPC__QUEUE":
+            return {"ok": True, "queue": []}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = ok
+    await coord.async_refresh()
+    assert deleted
+    assert deleted[-1][0] == DOMAIN
+
+
+@pytest.mark.asyncio
+async def test_playlist_coordinator_creates_and_clears_repairs_issue(
+    hass: object, mock_rpc_call: object, monkeypatch: MonkeyPatch
+) -> None:
+    created: list[tuple[str, str]] = []
+    deleted: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        "custom_components.redbot_media_player.playlist_coordinator.ir.async_create_issue",
+        lambda hass_obj, domain, issue_id, **kwargs: created.append((domain, issue_id)),
+    )
+    monkeypatch.setattr(
+        "custom_components.redbot_media_player.playlist_coordinator.ir.async_delete_issue",
+        lambda hass_obj, domain, issue_id: deleted.append((domain, issue_id)),
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test",
+        data={
+            "host": "127.0.0.1",
+            "port": 6133,
+            "guild_id": "1",
+            "channel_id": "2",
+            "actor_user_id": "3",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = RedRpcPlaylistCoordinator(hass, entry)
+
+    mock_rpc_call.side_effect = RedRpcError("down")
+    await coord.async_refresh()
+    assert created
+    assert created[-1][0] == DOMAIN
+
+    async def ok(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict[str, object]:
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = ok
+    await coord.async_refresh()
+    assert deleted
+    assert deleted[-1][0] == DOMAIN
