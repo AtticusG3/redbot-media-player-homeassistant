@@ -37,7 +37,9 @@ async def test_config_flow_user_shows_form(hass: object) -> None:
 
 
 @pytest.mark.asyncio
-async def test_config_flow_create_entry(hass: object) -> None:
+async def test_config_flow_create_entry(
+    hass: object, mock_rpc_call: object
+) -> None:
     """Successful validation creates an entry."""
     with patch(
         "custom_components.redbot_media_player.config_flow.verify_red_rpc",
@@ -50,8 +52,31 @@ async def test_config_flow_create_entry(hass: object) -> None:
             init["flow_id"],
             user_input=_valid_user_input(),
         )
+    await hass.async_block_till_done()
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert "Red RPC" in result["title"]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_create_entry_without_actor(
+    hass: object, mock_rpc_call: object
+) -> None:
+    """Actor ID is optional and may be blank."""
+    with patch(
+        "custom_components.redbot_media_player.config_flow.verify_red_rpc",
+        new_callable=AsyncMock,
+    ):
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        payload = _valid_user_input()
+        payload["actor_user_id"] = ""
+        result = await hass.config_entries.flow.async_configure(
+            init["flow_id"],
+            user_input=payload,
+        )
+    await hass.async_block_till_done()
+    assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.asyncio

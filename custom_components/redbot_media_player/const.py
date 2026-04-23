@@ -29,6 +29,7 @@ ATTR_QUERY = "query"
 ATTR_PLAYLIST_NAME = "playlist_name"
 ATTR_PLAYLIST_URL = "playlist_url"
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_ACTOR_USER_ID = "actor_user_id"
 ATTR_SELF_MUTE = "self_mute"
 ATTR_SELF_DEAF = "self_deaf"
 

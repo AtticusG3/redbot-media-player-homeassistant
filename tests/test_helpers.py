@@ -37,6 +37,21 @@ def test_get_rpc_params() -> None:
     }
 
 
+def test_get_rpc_params_without_actor() -> None:
+    """Blank actor in config maps to None for actor_id."""
+    entry = SimpleNamespace(
+        data={
+            CONF_HOST: "127.0.0.1",
+            CONF_PORT: "6133",
+            CONF_GUILD_ID: "111",
+            CONF_CHANNEL_ID: "222",
+            CONF_ACTOR_USER_ID: "   ",
+        },
+    )
+    p = get_rpc_params(entry)  # type: ignore[arg-type]
+    assert p["actor_id"] is None
+
+
 def test_get_audiodb_config_defaults() -> None:
     entry = SimpleNamespace(options={})
     en, key = get_audiodb_config(entry)  # type: ignore[arg-type]

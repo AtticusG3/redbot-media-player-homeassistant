@@ -27,7 +27,7 @@ Related host setup for Home Assistant add-on users: [redBot-hass](https://github
 1. Copy the `redbot_media_player` folder into your Home Assistant `config/custom_components/` directory (include `services.yaml`; do not leave a zero-byte `services.yaml` or Home Assistant may log a load error).
 2. Restart Home Assistant.
 3. **Settings** -> **Devices & services** -> **Add integration** -> **RedBot Media Player** (or add via UI search).
-4. Enter host (usually `127.0.0.1`), port, guild ID, text channel ID, and actor user ID (the same values used by the `ha_red_rpc` RPC methods).
+4. Enter host (usually `127.0.0.1`), port, guild ID, text channel ID, and optionally actor user ID (used by the `ha_red_rpc` RPC methods when set).
 
 ## Reconfigure and reauthenticate
 
@@ -46,16 +46,18 @@ Domain `redbot_media_player`:
 
 | Service | Data |
 | -------- | ------ |
-| `play` | `query` (required), optional `config_entry_id` if multiple entries |
-| `bumpplay` | `query` (required), optional `config_entry_id`; starts immediately via Red `[p]bumpplay` |
+| `play` | `query` (required), optional `config_entry_id`, optional `actor_user_id` |
+| `bumpplay` | `query` (required), optional `config_entry_id`, optional `actor_user_id`; starts immediately via Red `[p]bumpplay` |
 | `enqueue` | same as `play` |
-| `pause` | optional `config_entry_id` |
+| `pause` | optional `config_entry_id`, optional `actor_user_id` |
 | `queue` | optional `config_entry_id` |
-| `playlist_start` | `playlist_name` (required), optional `config_entry_id` |
-| `playlist_save_start` | `playlist_url` (required), optional `config_entry_id` |
-| `summon` | optional `config_entry_id` (Red `[p]summon`) |
-| `disconnect` | optional `config_entry_id` (Red `[p]disconnect`) |
+| `playlist_start` | `playlist_name` (required), optional `config_entry_id`, optional `actor_user_id` |
+| `playlist_save_start` | `playlist_url` (required), optional `config_entry_id`, optional `actor_user_id` |
+| `summon` | optional `config_entry_id`, optional `actor_user_id` (Red `[p]summon`) |
+| `disconnect` | optional `config_entry_id`, optional `actor_user_id` (Red `[p]disconnect`) |
 | `voice_state` | optional `self_mute`, `self_deaf`, `config_entry_id` (Discord self-mute/deafen) |
+
+When `actor_user_id` is not set in integration config or service data, actor-based services attempt to auto-select a user ID from current voice member IDs returned by `HAREDRPC__QUEUE`.
 
 Service responses return the JSON dict from the bot (e.g. `ok`, `now_playing`, `queue`).
 

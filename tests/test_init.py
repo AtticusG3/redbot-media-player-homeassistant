@@ -18,6 +18,7 @@ from custom_components.redbot_media_player import (
     async_setup,
 )
 from custom_components.redbot_media_player.const import (
+    ATTR_ACTOR_USER_ID,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_PLAYLIST_NAME,
     ATTR_PLAYLIST_URL,
@@ -719,6 +720,154 @@ async def test_service_playlist_save_start_falls_back_when_name_unresolved(
         DOMAIN,
         SERVICE_PLAYLIST_SAVE_START,
         {ATTR_PLAYLIST_URL: "https://open.spotify.com/playlist/abc"},
+        blocking=True,
+        return_response=True,
+    )
+    assert res["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_service_play_auto_selects_actor_from_queue_members(
+    hass: HomeAssistant, mock_rpc_call: AsyncMock
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="T",
+        data={
+            "host": "127.0.0.1",
+            "port": 6133,
+            "guild_id": "1",
+            "channel_id": "2",
+            "actor_user_id": "",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    async def route(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict | list[str]:
+        if method == "GET_METHODS":
+            return list(FULL_HA_RED_RPC_METHODS)
+        if method == "HAREDRPC__QUEUE":
+            return {
+                "ok": True,
+                "queue": [],
+                "voice_member_ids": [4444, 5555],
+                "bot_user_id": 5555,
+            }
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        if method == "HAREDRPC__PLAY":
+            assert params == [1, 2, "q", 4444]
+            return {"ok": True}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = route
+    res = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_PLAY,
+        {ATTR_QUERY: "q"},
+        blocking=True,
+        return_response=True,
+    )
+    assert res["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_service_play_auto_select_actor_missing_members_raises(
+    hass: HomeAssistant, mock_rpc_call: AsyncMock
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="T",
+        data={
+            "host": "127.0.0.1",
+            "port": 6133,
+            "guild_id": "1",
+            "channel_id": "2",
+            "actor_user_id": "",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    async def route(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict | list[str]:
+        if method == "GET_METHODS":
+            return list(FULL_HA_RED_RPC_METHODS)
+        if method == "HAREDRPC__QUEUE":
+            return {"ok": True, "queue": []}
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = route
+    with pytest.raises(HomeAssistantError, match="Cannot auto-select actor_user_id"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_PLAY,
+            {ATTR_QUERY: "q"},
+            blocking=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_service_play_service_actor_override_wins(
+    hass: HomeAssistant, mock_rpc_call: AsyncMock
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="T",
+        data={
+            "host": "127.0.0.1",
+            "port": 6133,
+            "guild_id": "1",
+            "channel_id": "2",
+            "actor_user_id": "",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    async def route(
+        host: str,
+        port: int,
+        method: str,
+        params: object | None = None,
+        *,
+        timeout: float = 120.0,
+    ) -> dict | list[str]:
+        if method == "GET_METHODS":
+            return list(FULL_HA_RED_RPC_METHODS)
+        if method == "HAREDRPC__QUEUE":
+            return {"ok": True, "queue": []}
+        if method == "HAREDRPC__PLAYLIST_LIST":
+            return {"ok": True, "playlists": []}
+        if method == "HAREDRPC__PLAY":
+            assert params == [1, 2, "q", 7777]
+            return {"ok": True}
+        raise AssertionError(method)
+
+    mock_rpc_call.side_effect = route
+    res = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_PLAY,
+        {ATTR_QUERY: "q", ATTR_ACTOR_USER_ID: "7777"},
         blocking=True,
         return_response=True,
     )
