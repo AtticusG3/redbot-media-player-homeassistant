@@ -430,11 +430,11 @@ async def test_queue_coordinator_creates_and_clears_repairs_issue(
     deleted: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.coordinator.ir.async_create_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_create_issue",
         lambda hass_obj, domain, issue_id, **kwargs: created.append((domain, issue_id)),
     )
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.coordinator.ir.async_delete_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_delete_issue",
         lambda hass_obj, domain, issue_id: deleted.append((domain, issue_id)),
     )
 
@@ -483,11 +483,11 @@ async def test_playlist_coordinator_creates_and_clears_repairs_issue(
     deleted: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.playlist_coordinator.ir.async_create_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_create_issue",
         lambda hass_obj, domain, issue_id, **kwargs: created.append((domain, issue_id)),
     )
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.playlist_coordinator.ir.async_delete_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_delete_issue",
         lambda hass_obj, domain, issue_id: deleted.append((domain, issue_id)),
     )
 
@@ -536,11 +536,11 @@ async def test_playlist_coordinator_clears_issue_when_playlists_missing(
     deleted: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.playlist_coordinator.ir.async_create_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_create_issue",
         lambda hass_obj, domain, issue_id, **kwargs: created.append((domain, issue_id)),
     )
     monkeypatch.setattr(
-        "custom_components.redbot_media_player.playlist_coordinator.ir.async_delete_issue",
+        "custom_components.redbot_media_player.helpers.ir.async_delete_issue",
         lambda hass_obj, domain, issue_id: deleted.append((domain, issue_id)),
     )
 
