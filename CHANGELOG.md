@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.1] - 2026-07-09
+
+### Changed (1.1.1)
+
+- Consolidated RPC service handlers, shared repairs/error helpers, and coordinator lookup paths (no intended behavior change).
+- oEmbed playlist title fetch now uses the Home Assistant aiohttp client session.
+- Added MIT license for HACS validation.
+- Removed unused `.kg` dev tooling and legacy `async_setup` / `async_unmute_volume` stubs.
+
+### Links (1.1.1)
+
+- Integration changelog: `custom_components/redbot_media_player/CHANGELOG.md`
+- Red cog (`ha_red_rpc`): <https://github.com/AtticusG3/redbot-media-player-cog>
+- Home Assistant add-on repo: <https://github.com/AtticusG3/redBot-hass>
+
 ## [1.1.0] - 2026-04-24
 
 ### Changed (1.1.0)

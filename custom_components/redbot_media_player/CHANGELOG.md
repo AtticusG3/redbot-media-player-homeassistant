@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] - 2026-07-09
+
+### Changed (1.1.1)
+
+- Internal refactor: table-driven HA services, shared RPC command-failure and repairs helpers, single playlist-coordinator storage key.
+- Playlist oEmbed lookup uses the managed Home Assistant web session.
+- Integration version advanced to `1.1.1`.
+
+### Links (1.1.1)
+
+- Repository changelog: `CHANGELOG.md`
+- Red cog (`ha_red_rpc`): <https://github.com/AtticusG3/redbot-media-player-cog>
+- Home Assistant add-on repo: <https://github.com/AtticusG3/redBot-hass>
+
 ## [1.1.0] - 2026-04-24
 
 ### Added (1.1.0)
