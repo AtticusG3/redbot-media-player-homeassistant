@@ -15,7 +15,6 @@ from custom_components.redbot_media_player import (
     DOMAIN,
     _guess_name_from_url,
     _normalize_service_result,
-    async_setup,
 )
 from custom_components.redbot_media_player.const import (
     ATTR_ACTOR_USER_ID,
@@ -27,6 +26,7 @@ from custom_components.redbot_media_player.const import (
     ATTR_SELF_MUTE,
     CONF_AUDIODB_ENABLE,
     FULL_HA_RED_RPC_METHODS,
+    PLAYLIST_COORDINATORS_KEY,
     SERVICE_BUMPPLAY,
     SERVICE_DISCONNECT,
     SERVICE_ENQUEUE,
@@ -59,10 +59,6 @@ def mock_playlist_name_resolver() -> None:
     ):
         yield
 
-
-@pytest.mark.asyncio
-async def test_async_setup_returns_true(hass: HomeAssistant) -> None:
-    assert await async_setup(hass, {}) is True
 
 
 def test_normalize_service_result_wraps_scalars() -> None:
@@ -613,7 +609,7 @@ async def test_service_playlist_save_start_refreshes_playlist_coordinator(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    playlist_coord = hass.data["redbot_media_player_playlist_coordinators"][entry.entry_id]
+    playlist_coord = hass.data[PLAYLIST_COORDINATORS_KEY][entry.entry_id]
     playlist_coord.async_request_refresh = AsyncMock()  # type: ignore[assignment]
 
     async def route(

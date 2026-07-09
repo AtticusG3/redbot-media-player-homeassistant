@@ -18,10 +18,13 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .audiodb import normalize_display_metadata
-from .const import DOMAIN
+from .const import PLAYLIST_COORDINATORS_KEY
 from .coordinator import RedRpcQueueCoordinator
-from .helpers import device_info_for_red_entry, get_rpc_params
+from .helpers import (
+    device_info_from_queue_coordinator,
+    format_track_line,
+    get_rpc_params,
+)
 from .playlist_coordinator import RedRpcPlaylistCoordinator
 
 PARALLEL_UPDATES = 1
@@ -118,8 +121,8 @@ async def async_setup_entry(
 ) -> None:
     """Create diagnostic sensors for this config entry."""
     coordinator: RedRpcQueueCoordinator = entry.runtime_data
-    playlist_coordinator: RedRpcPlaylistCoordinator = hass.data[DOMAIN][
-        "playlist_coordinators"
+    playlist_coordinator: RedRpcPlaylistCoordinator = hass.data[
+        PLAYLIST_COORDINATORS_KEY
     ][entry.entry_id]
     queue_entities = [
         RedDiscordDiagnosticSensor(coordinator, entry, desc)
@@ -159,11 +162,7 @@ class RedDiscordDiagnosticSensor(CoordinatorEntity[RedRpcQueueCoordinator], Sens
     @property
     def device_info(self) -> DeviceInfo:
         """Same device as the media player."""
-        return device_info_for_red_entry(
-            self._entry,
-            data=self.coordinator.data if self.coordinator.last_update_success else None,
-            last_update_success=self.coordinator.last_update_success,
-        )
+        return device_info_from_queue_coordinator(self._entry, self.coordinator)
 
 
 class RedDiscordPlaylistInventorySensor(
@@ -218,15 +217,7 @@ class RedDiscordPlaylistInventorySensor(
     @property
     def device_info(self) -> DeviceInfo:
         """Same device as media player."""
-        return device_info_for_red_entry(
-            self._entry,
-            data=(
-                self._queue_coordinator.data
-                if self._queue_coordinator.last_update_success
-                else None
-            ),
-            last_update_success=self._queue_coordinator.last_update_success,
-        )
+        return device_info_from_queue_coordinator(self._entry, self._queue_coordinator)
 
 
 class RedDiscordQueueInventorySensor(
@@ -262,14 +253,7 @@ class RedDiscordQueueInventorySensor(
             return None
         raw_title = str(first.get("title") or "")
         raw_author = str(first.get("author") or "")
-        artist, title = normalize_display_metadata(raw_author, raw_title)
-        if artist and title:
-            return f"{artist} - {title}"
-        if title:
-            return title
-        if artist:
-            return artist
-        return None
+        return format_track_line(raw_author, raw_title)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -284,15 +268,12 @@ class RedDiscordQueueInventorySensor(
             for item in queue:
                 if not isinstance(item, dict):
                     continue
-                raw_title = str(item.get("title") or "")
-                raw_author = str(item.get("author") or "")
-                artist, title = normalize_display_metadata(raw_author, raw_title)
-                if artist and title:
-                    queue_lines.append(f"{artist} - {title}")
-                elif title:
-                    queue_lines.append(title)
-                elif artist:
-                    queue_lines.append(artist)
+                line = format_track_line(
+                    str(item.get("author") or ""),
+                    str(item.get("title") or ""),
+                )
+                if line:
+                    queue_lines.append(line)
             out["queue"] = queue_lines
             out["queue_count"] = len(queue_lines)
         np = data.get("now_playing")
@@ -305,8 +286,4 @@ class RedDiscordQueueInventorySensor(
     @property
     def device_info(self) -> DeviceInfo:
         """Same device as media player."""
-        return device_info_for_red_entry(
-            self._entry,
-            data=self.coordinator.data if self.coordinator.last_update_success else None,
-            last_update_success=self.coordinator.last_update_success,
-        )
+        return device_info_from_queue_coordinator(self._entry, self.coordinator)

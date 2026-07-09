@@ -1,8 +1,0 @@
-# Alternate strings -> canonical node IDs
-README: doc:readme
-RedBot Media Player: integration:redbot-media-player
-binary_sensor: module:custom-components-redbot-media-player-binary-sensor-py
-hacs.json: config:hacs-json
-manifest.json: config:custom-components-redbot-media-player-manifest-json
-pyproject.toml: config:pyproject-toml
-sensor: module:custom-components-redbot-media-player-sensor-py

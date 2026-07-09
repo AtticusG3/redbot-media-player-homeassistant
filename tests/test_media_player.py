@@ -1189,18 +1189,6 @@ async def test_volume_level_none_when_percent_key_missing_vs_explicit_none(
     assert player.volume_level is None
 
 
-@pytest.mark.asyncio
-async def test_async_unmute_volume_delegates(
-    hass: HomeAssistant, mock_rpc_call: object
-) -> None:
-    entry = _entry(hass)
-    coord = RedRpcQueueCoordinator(hass, entry)
-    await coord.async_refresh()
-    player = RedDiscordMediaPlayer(coord, entry)
-    player.async_mute_volume = AsyncMock()
-    await player.async_unmute_volume()
-    player.async_mute_volume.assert_called_once_with(False)
-
 
 @pytest.mark.asyncio
 async def test_async_set_shuffle_calls_rpc_when_unknown_and_want_on(

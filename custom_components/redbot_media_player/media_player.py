@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .audiodb import normalize_display_metadata
 from .coordinator import RedRpcQueueCoordinator
-from .helpers import device_info_for_red_entry, get_rpc_params
+from .helpers import device_info_for_red_entry, get_rpc_params, raise_on_rpc_command_failure
 from .rpc import RedRpcError, rpc_call
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,19 +35,6 @@ def _now_playing(data: Any) -> dict[str, Any] | None:
         return None
     np = data.get("now_playing")
     return np if isinstance(np, dict) else None
-
-
-def _raise_on_rpc_result_error(method: str, result: Any) -> None:
-    """Raise when an RPC command returns a structured command failure."""
-    if not isinstance(result, dict):
-        return
-    if result.get("ok", True):
-        return
-    detail = result.get("detail")
-    err = result.get("error", "command_failed")
-    if detail is None:
-        raise HomeAssistantError(f"RedBot Media Player {method} failed: {err}")
-    raise HomeAssistantError(f"RedBot Media Player {method} failed: {err} ({detail})")
 
 
 def _supported_features_for_rpc(methods: frozenset[str]) -> MediaPlayerEntityFeature:
@@ -342,7 +329,7 @@ class RedDiscordMediaPlayer(CoordinatorEntity[RedRpcQueueCoordinator], MediaPlay
                 [p["guild_id"], p["channel_id"], p["actor_id"], pct],
                 timeout=90.0,
             )
-            _raise_on_rpc_result_error("HAREDRPC__VOLUME", result)
+            raise_on_rpc_command_failure("HAREDRPC__VOLUME", result)
         except RedRpcError as err:
             _LOGGER.error("volume failed: %s", err)
             raise HomeAssistantError(f"RedBot Media Player: {err}") from err
@@ -362,10 +349,6 @@ class RedDiscordMediaPlayer(CoordinatorEntity[RedRpcQueueCoordinator], MediaPlay
             target = 0.5
         await self.async_set_volume_level(target)
         self._restore_volume_level = None
-
-    async def async_unmute_volume(self) -> None:
-        """Restore volume after mute (legacy helper; prefer async_mute_volume(False))."""
-        await self.async_mute_volume(False)
 
     async def async_set_shuffle(self, shuffle: bool) -> None:
         """Match Red shuffle setting; may toggle once."""
@@ -421,7 +404,7 @@ class RedDiscordMediaPlayer(CoordinatorEntity[RedRpcQueueCoordinator], MediaPlay
                 [p["guild_id"], p["channel_id"], media_id, p["actor_id"]],
                 timeout=180.0,
             )
-            _raise_on_rpc_result_error("HAREDRPC__PLAY", result)
+            raise_on_rpc_command_failure("HAREDRPC__PLAY", result)
         except RedRpcError as err:
             _LOGGER.error("play_media failed: %s", err)
             raise HomeAssistantError(f"RedBot Media Player: {err}") from err
@@ -438,7 +421,7 @@ class RedDiscordMediaPlayer(CoordinatorEntity[RedRpcQueueCoordinator], MediaPlay
                 params,
                 timeout=120.0,
             )
-            _raise_on_rpc_result_error(method, result)
+            raise_on_rpc_command_failure(method, result)
         except RedRpcError as err:
             _LOGGER.error("%s failed: %s", method, err)
             raise HomeAssistantError(f"RedBot Media Player: {err}") from err
@@ -454,7 +437,7 @@ class RedDiscordMediaPlayer(CoordinatorEntity[RedRpcQueueCoordinator], MediaPlay
                 [p["guild_id"], p["channel_id"], p["actor_id"]],
                 timeout=90.0,
             )
-            _raise_on_rpc_result_error("HAREDRPC__PAUSE", result)
+            raise_on_rpc_command_failure("HAREDRPC__PAUSE", result)
         except RedRpcError as err:
             _LOGGER.error("pause failed: %s", err)
             raise HomeAssistantError(f"RedBot Media Player: {err}") from err

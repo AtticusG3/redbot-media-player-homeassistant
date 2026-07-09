@@ -8,7 +8,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .helpers import get_playlist_coordinator
 
 _REDACT_KEYS = {
     "host",
@@ -24,9 +24,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     queue_coordinator = entry.runtime_data
-    playlist_coordinator = hass.data.get(DOMAIN, {}).get("playlist_coordinators", {}).get(
-        entry.entry_id
-    )
+    playlist_coordinator = get_playlist_coordinator(hass, entry.entry_id)
     return {
         "entry": {
             "entry_id": entry.entry_id,

@@ -67,3 +67,5 @@ FULL_HA_RED_RPC_METHODS = frozenset(
 
 REPAIRS_ISSUE_RPC_UNAVAILABLE = "rpc_unavailable"
 REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE = "playlist_rpc_unavailable"
+
+PLAYLIST_COORDINATORS_KEY = f"{DOMAIN}_playlist_coordinators"

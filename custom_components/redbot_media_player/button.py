@@ -13,8 +13,13 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
-from .helpers import device_info_for_red_entry, get_rpc_params
+from .const import PLAYLIST_COORDINATORS_KEY
+from .helpers import (
+    device_info_for_red_entry,
+    device_info_from_queue_coordinator,
+    get_rpc_params,
+    raise_on_rpc_command_failure,
+)
 from .playlist_coordinator import RedRpcPlaylistCoordinator
 from .rpc import RedRpcError, rpc_call
 
@@ -28,8 +33,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up dynamic playlist buttons from coordinator data."""
-    playlist_coordinator: RedRpcPlaylistCoordinator = hass.data[DOMAIN][
-        "playlist_coordinators"
+    playlist_coordinator: RedRpcPlaylistCoordinator = hass.data[
+        PLAYLIST_COORDINATORS_KEY
     ][entry.entry_id]
     entities: dict[str, RedDiscordPlaylistButton] = {}
 
@@ -126,11 +131,11 @@ class RedDiscordPlaylistButton(CoordinatorEntity[RedRpcPlaylistCoordinator], But
         q_coord = self.hass.config_entries.async_get_entry(
             self._entry.entry_id
         ).runtime_data
-        return device_info_for_red_entry(
-            self._entry,
-            data=q_coord.data if q_coord and q_coord.last_update_success else None,
-            last_update_success=bool(q_coord and q_coord.last_update_success),
-        )
+        if q_coord is None:
+            return device_info_for_red_entry(
+                self._entry, data=None, last_update_success=False
+            )
+        return device_info_from_queue_coordinator(self._entry, q_coord)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -148,14 +153,7 @@ class RedDiscordPlaylistButton(CoordinatorEntity[RedRpcPlaylistCoordinator], But
                 [p["guild_id"], p["channel_id"], p["actor_id"]],
                 timeout=120.0,
             )
-            if isinstance(stop_result, dict) and not stop_result.get("ok", True):
-                detail = stop_result.get("detail")
-                err = stop_result.get("error", "command_failed")
-                if detail is None:
-                    raise HomeAssistantError(f"RedBot Media Player stop failed: {err}")
-                raise HomeAssistantError(
-                    f"RedBot Media Player stop failed: {err} ({detail})"
-                )
+            raise_on_rpc_command_failure("stop", stop_result)
 
             start_result = await rpc_call(
                 p["host"],
@@ -166,12 +164,5 @@ class RedDiscordPlaylistButton(CoordinatorEntity[RedRpcPlaylistCoordinator], But
             )
         except RedRpcError as err:
             raise HomeAssistantError(f"RedBot Media Player: {err}") from err
-        if isinstance(start_result, dict) and not start_result.get("ok", True):
-            detail = start_result.get("detail")
-            err = start_result.get("error", "command_failed")
-            if detail is None:
-                raise HomeAssistantError(f"RedBot Media Player playlist start failed: {err}")
-            raise HomeAssistantError(
-                f"RedBot Media Player playlist start failed: {err} ({detail})"
-            )
+        raise_on_rpc_command_failure("playlist start", start_result)
         await self.coordinator.async_request_refresh()

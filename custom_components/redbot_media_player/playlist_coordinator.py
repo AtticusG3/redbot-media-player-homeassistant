@@ -8,11 +8,14 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE
-from .helpers import get_rpc_params
+from .helpers import (
+    create_rpc_repairs_issue,
+    delete_rpc_repairs_issue,
+    get_rpc_params,
+)
 from .rpc import RedRpcError, rpc_call
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,43 +40,50 @@ class RedRpcPlaylistCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             f"{REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE}_{entry.entry_id}"
         )
 
-    def _raise_repairs_issue(self, host: str, port: int) -> None:
-        """Create or refresh the playlist RPC availability issue."""
-        ir.async_create_issue(
+    def _fail_playlist_update(
+        self,
+        host: str,
+        port: int,
+        message: str,
+        *,
+        cause: BaseException | None = None,
+    ) -> None:
+        """Record repairs issue and raise UpdateFailed."""
+        create_rpc_repairs_issue(
             self.hass,
-            DOMAIN,
-            self._repairs_issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.ERROR,
+            issue_id=self._repairs_issue_id,
             translation_key=REPAIRS_ISSUE_PLAYLIST_RPC_UNAVAILABLE,
-            translation_placeholders={"host": host, "port": str(port)},
+            host=host,
+            port=port,
         )
+        raise UpdateFailed(message) from cause
 
     async def _async_update_data(self) -> dict[str, Any]:
         p = get_rpc_params(self.config_entry)
+        host = str(p["host"])
+        port = p["port"]
         try:
             result = await rpc_call(
                 p["host"],
-                p["port"],
+                port,
                 "HAREDRPC__PLAYLIST_LIST",
                 [p["guild_id"], p["actor_id"]],
                 timeout=90.0,
             )
         except RedRpcError as err:
-            self._raise_repairs_issue(str(p["host"]), p["port"])
-            raise UpdateFailed(f"Red RPC playlist list failed: {err}") from err
+            self._fail_playlist_update(
+                host, port, f"Red RPC playlist list failed: {err}", cause=err
+            )
 
         if not isinstance(result, dict):
-            self._raise_repairs_issue(str(p["host"]), p["port"])
-            raise UpdateFailed("Invalid playlist list response from Red")
+            self._fail_playlist_update(host, port, "Invalid playlist list response from Red")
 
         playlists = result.get("playlists")
         if playlists is None:
             result["playlists"] = []
-            ir.async_delete_issue(self.hass, DOMAIN, self._repairs_issue_id)
+            delete_rpc_repairs_issue(self.hass, self._repairs_issue_id)
             return result
         if not isinstance(playlists, list):
-            self._raise_repairs_issue(str(p["host"]), p["port"])
-            raise UpdateFailed("Invalid playlists payload from Red")
-        ir.async_delete_issue(self.hass, DOMAIN, self._repairs_issue_id)
+            self._fail_playlist_update(host, port, "Invalid playlists payload from Red")
+        delete_rpc_repairs_issue(self.hass, self._repairs_issue_id)
         return result

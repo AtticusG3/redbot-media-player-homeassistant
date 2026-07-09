@@ -14,7 +14,7 @@ from custom_components.redbot_media_player.button import (
     RedDiscordPlaylistButton,
     async_setup_entry as async_setup_button_entry,
 )
-from custom_components.redbot_media_player.const import DOMAIN
+from custom_components.redbot_media_player.const import DOMAIN, PLAYLIST_COORDINATORS_KEY
 from custom_components.redbot_media_player.playlist_coordinator import (
     RedRpcPlaylistCoordinator,
 )
@@ -52,7 +52,7 @@ async def test_playlist_button_setup_normalizes_and_updates(
     }
     coord.last_update_success = True
 
-    hass.data.setdefault(DOMAIN, {})["playlist_coordinators"] = {entry.entry_id: coord}
+    hass.data.setdefault(PLAYLIST_COORDINATORS_KEY, {})[entry.entry_id] = coord
     monkeypatch.setattr(coord, "async_request_refresh", AsyncMock())
 
     added: list[RedDiscordPlaylistButton] = []

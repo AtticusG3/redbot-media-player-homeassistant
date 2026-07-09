@@ -55,36 +55,32 @@ async def rpc_call(
             session = None
 
     if session is not None:
-        try:
-            return await _async_rpc_call_on_session(
-                session, url, method, params
-            )
-        except RedRpcError:
-            raise
-        except (
-            aiohttp.ClientConnectorError,
-            aiohttp.ClientError,
-            OSError,
-            TimeoutError,
-        ) as exc:
-            raise RedRpcError(_CONN_HINT) from exc
+        return await _rpc_call_on_session(session, url, method, params)
 
     # Force threaded DNS resolver so Windows does not require aiodns SelectorEventLoop.
     connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
     async with aiohttp.ClientSession(timeout=client_timeout, connector=connector) as owned:
-        try:
-            return await _async_rpc_call_on_session(
-                owned, url, method, params
-            )
-        except RedRpcError:
-            raise
-        except (
-            aiohttp.ClientConnectorError,
-            aiohttp.ClientError,
-            OSError,
-            TimeoutError,
-        ) as exc:
-            raise RedRpcError(_CONN_HINT) from exc
+        return await _rpc_call_on_session(owned, url, method, params)
+
+
+async def _rpc_call_on_session(
+    session: aiohttp.ClientSession,
+    url: str,
+    method: str,
+    params: list[Any] | None,
+) -> Any:
+    """Run one JSON-RPC call and map transport failures to RedRpcError."""
+    try:
+        return await _async_rpc_call_on_session(session, url, method, params)
+    except RedRpcError:
+        raise
+    except (
+        aiohttp.ClientConnectorError,
+        aiohttp.ClientError,
+        OSError,
+        TimeoutError,
+    ) as exc:
+        raise RedRpcError(_CONN_HINT) from exc
 
 
 async def _async_rpc_call_on_session(

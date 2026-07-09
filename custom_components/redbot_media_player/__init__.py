@@ -5,21 +5,20 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote_plus, unquote, urlparse
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     ATTR_ACTOR_USER_ID,
-    SERVICE_BUMPPLAY,
     ATTR_CONFIG_ENTRY_ID,
     ATTR_PLAYLIST_NAME,
     ATTR_PLAYLIST_URL,
@@ -27,6 +26,8 @@ from .const import (
     ATTR_SELF_DEAF,
     ATTR_SELF_MUTE,
     DOMAIN,
+    PLAYLIST_COORDINATORS_KEY,
+    SERVICE_BUMPPLAY,
     SERVICE_DISCONNECT,
     SERVICE_ENQUEUE,
     SERVICE_PAUSE,
@@ -38,19 +39,31 @@ from .const import (
     SERVICE_VOICE_STATE,
 )
 from .coordinator import RedRpcQueueCoordinator
-from .helpers import get_rpc_params
+from .helpers import get_playlist_coordinator, get_rpc_params
 from .playlist_coordinator import RedRpcPlaylistCoordinator
 from .rpc import RedRpcError, async_fetch_red_rpc_methods, rpc_call, set_rpc_hass
 
 _LOGGER = logging.getLogger(__name__)
 
 _SERVICES_FLAG = f"{DOMAIN}_services_registered"
-_PLAYLIST_COORDINATORS = f"{DOMAIN}_playlist_coordinators"
 _RPC_PLAYLIST_SAVE_START = "HAREDRPC__PLAYLIST_SAVE_START"
 _RPC_PLAYLIST_SAVE_START_NAMED = "HAREDRPC__PLAYLIST_SAVE_START_NAMED"
 _SPOTIFY_OEMBED_URL = "https://open.spotify.com/oembed?url={url}"
 _YOUTUBE_OEMBED_URL = "https://www.youtube.com/oembed?format=json&url={url}"
 _PLAYLIST_NAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9]+")
+
+_SERVICE_NAMES = (
+    SERVICE_PLAY,
+    SERVICE_BUMPPLAY,
+    SERVICE_ENQUEUE,
+    SERVICE_PAUSE,
+    SERVICE_QUEUE,
+    SERVICE_PLAYLIST_START,
+    SERVICE_PLAYLIST_SAVE_START,
+    SERVICE_SUMMON,
+    SERVICE_DISCONNECT,
+    SERVICE_VOICE_STATE,
+)
 
 SERVICE_BASE_SCHEMA = vol.Schema(
     {
@@ -104,7 +117,9 @@ def _guess_name_from_url(playlist_url: str) -> str | None:
     return None
 
 
-async def _async_fetch_playlist_title_from_oembed(playlist_url: str) -> str | None:
+async def _async_fetch_playlist_title_from_oembed(
+    hass: HomeAssistant, playlist_url: str
+) -> str | None:
     """Fetch playlist title directly from Spotify/YouTube oEmbed endpoints."""
     parsed = urlparse(playlist_url)
     host = parsed.netloc.lower()
@@ -117,15 +132,14 @@ async def _async_fetch_playlist_title_from_oembed(playlist_url: str) -> str | No
     if oembed_url is None:
         return None
 
-    timeout = aiohttp.ClientTimeout(total=8.0)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        try:
-            async with session.get(oembed_url, allow_redirects=True) as response:
-                if response.status != 200:
-                    return None
-                payload = json.loads(await response.text())
-        except (aiohttp.ClientError, TimeoutError, ValueError):
-            return None
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(oembed_url, allow_redirects=True, timeout=8) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(await response.text())
+    except (TimeoutError, ValueError, OSError):
+        return None
 
     title = payload.get("title")
     if not isinstance(title, str):
@@ -134,9 +148,11 @@ async def _async_fetch_playlist_title_from_oembed(playlist_url: str) -> str | No
     return cleaned or None
 
 
-async def _async_resolve_playlist_name(playlist_url: str) -> str | None:
+async def _async_resolve_playlist_name(
+    hass: HomeAssistant, playlist_url: str
+) -> str | None:
     """Resolve playlist name from provider metadata with URL fallback."""
-    resolved = await _async_fetch_playlist_title_from_oembed(playlist_url)
+    resolved = await _async_fetch_playlist_title_from_oembed(hass, playlist_url)
     if resolved:
         return resolved
     guessed = _guess_name_from_url(playlist_url)
@@ -264,9 +280,58 @@ async def _async_resolve_actor_id(entry: ConfigEntry, call: ServiceCall) -> int:
     return actor_from_queue
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Legacy setup."""
-    return True
+async def _async_refresh_playlists_on_success(
+    hass: HomeAssistant, entry_id: str, result: dict[str, Any]
+) -> None:
+    """Refresh playlist coordinator after a mutating playlist RPC."""
+    if not result.get("ok", True):
+        return
+    playlist_coord = get_playlist_coordinator(hass, entry_id)
+    if playlist_coord is not None:
+        await playlist_coord.async_request_refresh()
+
+
+def _make_actor_rpc_handler(
+    hass: HomeAssistant,
+    method: str,
+    build_tail: Callable[[ServiceCall, int], list[Any]],
+    *,
+    timeout: float,
+    refresh_playlists: bool = False,
+) -> Callable[[ServiceCall], Any]:
+    """Build a service handler for guild+channel+actor RPC methods."""
+
+    async def handler(call: ServiceCall) -> dict[str, Any]:
+        ent = await _async_get_entry(hass, call)
+        p = get_rpc_params(ent)
+        actor_id = await _async_resolve_actor_id(ent, call)
+        params = [p["guild_id"], p["channel_id"], *build_tail(call, actor_id)]
+        result = await _async_call_service_rpc(ent, method, params, timeout=timeout)
+        if refresh_playlists:
+            await _async_refresh_playlists_on_success(hass, ent.entry_id, result)
+        return result
+
+    return handler
+
+
+def _make_guild_rpc_handler(
+    hass: HomeAssistant,
+    method: str,
+    build_tail: Callable[[ServiceCall], list[Any]] | None = None,
+    *,
+    timeout: float,
+) -> Callable[[ServiceCall], Any]:
+    """Build a service handler for guild-scoped RPC methods."""
+
+    async def handler(call: ServiceCall) -> dict[str, Any]:
+        ent = await _async_get_entry(hass, call)
+        p = get_rpc_params(ent)
+        tail = build_tail(call) if build_tail is not None else []
+        return await _async_call_service_rpc(
+            ent, method, [p["guild_id"], *tail], timeout=timeout
+        )
+
+    return handler
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -280,10 +345,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     await coordinator.async_refresh()
     entry.runtime_data = coordinator
-    hass.data.setdefault(_PLAYLIST_COORDINATORS, {})[entry.entry_id] = playlist_coordinator
-    hass.data.setdefault(DOMAIN, {})["playlist_coordinators"] = hass.data[
-        _PLAYLIST_COORDINATORS
-    ]
+    hass.data.setdefault(PLAYLIST_COORDINATORS_KEY, {})[entry.entry_id] = (
+        playlist_coordinator
+    )
 
     async def _on_options_update(_h: HomeAssistant, updated: ConfigEntry) -> None:
         coord: RedRpcQueueCoordinator | None = updated.runtime_data
@@ -299,92 +363,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry, ("media_player", "binary_sensor", "sensor", "button")
     )
 
-    async def handle_play(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__PLAY",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
-            timeout=180.0,
-        )
-
-    async def handle_bumpplay(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__BUMPPLAY",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
-            timeout=180.0,
-        )
-
-    async def handle_enqueue(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__ENQUEUE",
-            [p["guild_id"], p["channel_id"], call.data[ATTR_QUERY], actor_id],
-            timeout=180.0,
-        )
-
-    async def handle_pause(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__PAUSE",
-            [p["guild_id"], p["channel_id"], actor_id],
-            timeout=90.0,
-        )
-
-    async def handle_queue(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__QUEUE",
-            [p["guild_id"]],
-            timeout=60.0,
-        )
-
-    async def handle_playlist_start(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        result = await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__PLAYLIST_START",
-            [
-                p["guild_id"],
-                p["channel_id"],
-                call.data[ATTR_PLAYLIST_NAME],
-                actor_id,
-            ],
-            timeout=300.0,
-        )
-        if isinstance(result, dict) and result.get("ok", True):
-            playlist_coord = hass.data.get(_PLAYLIST_COORDINATORS, {}).get(ent.entry_id)
-            if playlist_coord is not None:
-                await playlist_coord.async_request_refresh()
-        return result
-
     async def handle_playlist_save_start(call: ServiceCall) -> dict[str, Any]:
         ent = await _async_get_entry(hass, call)
         p = get_rpc_params(ent)
         actor_id = await _async_resolve_actor_id(ent, call)
         playlist_url = call.data[ATTR_PLAYLIST_URL]
-        playlist_name = await _async_resolve_playlist_name(playlist_url)
-        coordinator: RedRpcQueueCoordinator | None = ent.runtime_data
+        playlist_name = await _async_resolve_playlist_name(hass, playlist_url)
+        queue_coord: RedRpcQueueCoordinator | None = ent.runtime_data
         supports_named_rpc = bool(
-            coordinator
-            and coordinator.rpc_method_names
-            and _RPC_PLAYLIST_SAVE_START_NAMED in coordinator.rpc_method_names
+            queue_coord
+            and queue_coord.rpc_method_names
+            and _RPC_PLAYLIST_SAVE_START_NAMED in queue_coord.rpc_method_names
             and playlist_name
         )
         rpc_method = (
@@ -411,120 +400,113 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             params,
             timeout=300.0,
         )
-        if isinstance(result, dict) and result.get("ok", True):
-            playlist_coord = hass.data.get(_PLAYLIST_COORDINATORS, {}).get(ent.entry_id)
-            if playlist_coord is not None:
-                await playlist_coord.async_request_refresh()
+        await _async_refresh_playlists_on_success(hass, ent.entry_id, result)
         return result
 
-    async def handle_summon(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__SUMMON",
-            [p["guild_id"], p["channel_id"], actor_id],
-            timeout=120.0,
-        )
-
-    async def handle_disconnect(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        actor_id = await _async_resolve_actor_id(ent, call)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__DISCONNECT",
-            [p["guild_id"], p["channel_id"], actor_id],
-            timeout=120.0,
-        )
-
-    async def handle_voice_state(call: ServiceCall) -> dict[str, Any]:
-        ent = await _async_get_entry(hass, call)
-        p = get_rpc_params(ent)
-        return await _async_call_service_rpc(
-            ent,
-            "HAREDRPC__VOICE_STATE",
-            [
-                p["guild_id"],
-                call.data[ATTR_SELF_MUTE],
-                call.data[ATTR_SELF_DEAF],
-            ],
-            timeout=60.0,
-        )
+    service_handlers: dict[str, tuple[Any, vol.Schema, Callable[[ServiceCall], Any]]] = {
+        SERVICE_PLAY: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__PLAY",
+                lambda call, actor: [call.data[ATTR_QUERY], actor],
+                timeout=180.0,
+            ),
+            SERVICE_PLAY_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_BUMPPLAY: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__BUMPPLAY",
+                lambda call, actor: [call.data[ATTR_QUERY], actor],
+                timeout=180.0,
+            ),
+            SERVICE_PLAY_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_ENQUEUE: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__ENQUEUE",
+                lambda call, actor: [call.data[ATTR_QUERY], actor],
+                timeout=180.0,
+            ),
+            SERVICE_PLAY_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_PAUSE: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__PAUSE",
+                lambda _call, actor: [actor],
+                timeout=90.0,
+            ),
+            SERVICE_BASE_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_QUEUE: (
+            _make_guild_rpc_handler(hass, "HAREDRPC__QUEUE", timeout=60.0),
+            SERVICE_BASE_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_PLAYLIST_START: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__PLAYLIST_START",
+                lambda call, actor: [call.data[ATTR_PLAYLIST_NAME], actor],
+                timeout=300.0,
+                refresh_playlists=True,
+            ),
+            SERVICE_PLAYLIST_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_PLAYLIST_SAVE_START: (
+            handle_playlist_save_start,
+            SERVICE_PLAYLIST_SAVE_START_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_SUMMON: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__SUMMON",
+                lambda _call, actor: [actor],
+                timeout=120.0,
+            ),
+            SERVICE_BASE_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_DISCONNECT: (
+            _make_actor_rpc_handler(
+                hass,
+                "HAREDRPC__DISCONNECT",
+                lambda _call, actor: [actor],
+                timeout=120.0,
+            ),
+            SERVICE_BASE_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+        SERVICE_VOICE_STATE: (
+            _make_guild_rpc_handler(
+                hass,
+                "HAREDRPC__VOICE_STATE",
+                lambda call: [call.data[ATTR_SELF_MUTE], call.data[ATTR_SELF_DEAF]],
+                timeout=60.0,
+            ),
+            SERVICE_VOICE_STATE_SCHEMA,
+            SupportsResponse.OPTIONAL,
+        ),
+    }
 
     if not hass.data.get(_SERVICES_FLAG):
         hass.data[_SERVICES_FLAG] = True
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_PLAY,
-            handle_play,
-            schema=SERVICE_PLAY_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_BUMPPLAY,
-            handle_bumpplay,
-            schema=SERVICE_PLAY_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_ENQUEUE,
-            handle_enqueue,
-            schema=SERVICE_PLAY_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_PAUSE,
-            handle_pause,
-            schema=SERVICE_BASE_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_QUEUE,
-            handle_queue,
-            schema=SERVICE_BASE_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_PLAYLIST_START,
-            handle_playlist_start,
-            schema=SERVICE_PLAYLIST_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_PLAYLIST_SAVE_START,
-            handle_playlist_save_start,
-            schema=SERVICE_PLAYLIST_SAVE_START_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_SUMMON,
-            handle_summon,
-            schema=SERVICE_BASE_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_DISCONNECT,
-            handle_disconnect,
-            schema=SERVICE_BASE_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_VOICE_STATE,
-            handle_voice_state,
-            schema=SERVICE_VOICE_STATE_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
+        for service_name, (handler, schema, supports_response) in service_handlers.items():
+            hass.services.async_register(
+                DOMAIN,
+                service_name,
+                handler,
+                schema=schema,
+                supports_response=supports_response,
+            )
 
     return True
 
@@ -541,7 +523,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if coordinator is not None:
         await coordinator.async_shutdown()
         entry.runtime_data = None
-    playlist_coordinator = hass.data.get(_PLAYLIST_COORDINATORS, {}).pop(
+    playlist_coordinator = hass.data.get(PLAYLIST_COORDINATORS_KEY, {}).pop(
         entry.entry_id, None
     )
     if playlist_coordinator is not None:
@@ -553,18 +535,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if e.entry_id != entry.entry_id and e.state is ConfigEntryState.LOADED
     ]
     if not remaining:
-        for svc in (
-            SERVICE_PLAY,
-            SERVICE_BUMPPLAY,
-            SERVICE_ENQUEUE,
-            SERVICE_PAUSE,
-            SERVICE_QUEUE,
-            SERVICE_PLAYLIST_START,
-            SERVICE_PLAYLIST_SAVE_START,
-            SERVICE_SUMMON,
-            SERVICE_DISCONNECT,
-            SERVICE_VOICE_STATE,
-        ):
+        for svc in _SERVICE_NAMES:
             hass.services.async_remove(DOMAIN, svc)
         hass.data.pop(_SERVICES_FLAG, None)
         set_rpc_hass(None)

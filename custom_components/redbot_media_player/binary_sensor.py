@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import RedRpcQueueCoordinator
-from .helpers import device_info_for_red_entry
+from .helpers import device_info_from_queue_coordinator
 
 PARALLEL_UPDATES = 1
 
@@ -120,8 +120,4 @@ class RedDiscordDiagnosticBinary(
     @property
     def device_info(self) -> DeviceInfo:
         """Same device as the media player; name follows voice/guild when ok."""
-        return device_info_for_red_entry(
-            self._entry,
-            data=self.coordinator.data if self.coordinator.last_update_success else None,
-            last_update_success=self.coordinator.last_update_success,
-        )
+        return device_info_from_queue_coordinator(self._entry, self.coordinator)
