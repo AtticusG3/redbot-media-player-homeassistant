@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote_plus, unquote, urlparse
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
@@ -134,7 +135,11 @@ async def _async_fetch_playlist_title_from_oembed(
 
     session = async_get_clientsession(hass)
     try:
-        async with session.get(oembed_url, allow_redirects=True, timeout=8) as response:
+        async with session.get(
+            oembed_url,
+            allow_redirects=True,
+            timeout=aiohttp.ClientTimeout(total=8),
+        ) as response:
             if response.status != 200:
                 return None
             payload = json.loads(await response.text())
@@ -403,7 +408,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_refresh_playlists_on_success(hass, ent.entry_id, result)
         return result
 
-    service_handlers: dict[str, tuple[Any, vol.Schema, Callable[[ServiceCall], Any]]] = {
+    service_handlers: dict[
+        str, tuple[Callable[[ServiceCall], Any], vol.Schema, SupportsResponse]
+    ] = {
         SERVICE_PLAY: (
             _make_actor_rpc_handler(
                 hass,
